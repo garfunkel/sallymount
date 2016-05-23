@@ -5,32 +5,76 @@
 
 #include "usb.h"
 
+char *usb_device_to_str(struct usb_device *device)
+{
+	size_t str_len = strlen(device->node) + 1 +
+	                 strlen(device->manufacturer) + 1 +
+	                 strlen(device->product) + 1 +
+	                 strlen(device->serial) + 1 + 2 + 1 +
+	                 strlen(device->dev_path) + 1 +
+	                 strlen(device->version) + 1 +
+	                 strlen(device->speed) + 1;
+
+	char *str = malloc(str_len + 1);
+
+	sprintf(str, "%s\t%s\t%s\t%s\t%d\t%s\t%s\t%s",
+		    device->node,
+	        device->manufacturer,
+	        device->product,
+	        device->serial,
+	        device->bus,
+	        device->dev_path,
+	        device->version,
+	        device->speed);
+
+	return str;
+}
+
 int usb_print(char *usb_path)
 {
-	printf("PRINT %s\n", usb_path);
+	int ret_code = 0;
+	struct usb_device_list *list = usb_device_list_get();
 
-	return 0;
+	while (list && list->device) {
+		if (strcmp(list->device->dev_path, usb_path) == 0) {
+			printf("%s\n", usb_device_to_str(list->device));
+		}
+
+		list = list->next;
+	}
+
+	return ret_code;
 }
 
 int usb_print_multiple(char *usb_paths[], int num_usb_paths)
 {
 	int ret_code = 0;
+	struct usb_device_list *head = usb_device_list_get();
+	struct usb_device_list *list = NULL;
 
-	for (int i = 0; i < num_usb_paths; i++)
-		if ((ret_code = usb_print(usb_paths[i])) != 0)
-			break;
+	for (int i = 0; i < num_usb_paths; i++) {
+		list = head;
+
+		while (list && list->device) {
+			if (strcmp(list->device->dev_path, usb_paths[i]) == 0) {
+				printf("%s\n", usb_device_to_str(list->device));
+
+				break;
+			}
+
+			list = list->next;
+		}
+	}
 
 	return ret_code;
 }
 
 int usb_print_all()
 {
-	printf("PRINT ALL\n");
-
 	struct usb_device_list *list = usb_device_list_get();
 
-	while (list) {
-		printf("%p\n", list->device);
+	while (list && list->device) {
+		printf("%s\n", usb_device_to_str(list->device));
 
 		list = list->next;
 	}
@@ -88,7 +132,7 @@ int usb_umount_all()
 	return 0;
 }
 
-void usb_device_list_add(struct usb_device_list *list, struct udev_device *device)
+void usb_device_list_add(struct usb_device_list *list, struct usb_device *device)
 {
 	if (!list->device) {
 		list->device = device;
@@ -135,24 +179,27 @@ struct usb_device_list *usb_device_list_get()
 		struct udev_device *scsi_device = udev_device_new_from_syspath(udev, device_name);
 		struct udev_device *usb_device = udev_device_get_parent_with_subsystem_devtype(scsi_device, "usb", "usb_device");
 		struct udev_device *hub_device = udev_device_get_parent_with_subsystem_devtype(usb_device, "usb", "usb_device");
-		struct udev_device *block_device = usb_device_get_child(udev, scsi_device, "block");
-		struct udev_device *scsi_disk_device = usb_device_get_child(udev, scsi_device, "scsi_disk");
+		struct udev_device *block_device = usb_udev_device_get_child(udev, scsi_device, "block");
+		struct udev_device *scsi_disk_device = usb_udev_device_get_child(udev, scsi_device, "scsi_disk");
 
 		if (usb_device && block_device && scsi_disk_device) {
+			struct usb_device *device = malloc(sizeof(struct usb_device));
+
+			device->node = strdup((char *)udev_device_get_devnode(block_device));
+			device->manufacturer = strdup((char *)udev_device_get_sysattr_value(usb_device, "manufacturer"));
+			device->product = strdup((char *)udev_device_get_sysattr_value(usb_device, "product"));
+			device->serial = strdup((char *)udev_device_get_sysattr_value(usb_device, "serial"));
+			device->dev_path = strdup((char *)udev_device_get_sysattr_value(usb_device, "devpath"));
+			device->sys_path = strdup((char *)udev_device_get_syspath(usb_device));
+			device->speed = strdup((char *)udev_device_get_sysattr_value(usb_device, "speed"));
+			device->version = strdup((char *)udev_device_get_sysattr_value(usb_device, "version"));
+			device->max_children = atoi(udev_device_get_sysattr_value(usb_device, "maxchild"));
+			device->bus = atoi(udev_device_get_sysattr_value(usb_device, "busnum"));
+
 			//printf("%s\n", udev_device_get_syspath(usb_device));
 			//printf("\t%s\n", udev_device_get_syspath(scsi_device));
 			//printf("\t\t%s\n", udev_device_get_syspath(block_device));
 			//printf("\t\t%s\n", udev_device_get_syspath(scsi_disk_device));
-
-			/*printf("Device node: %s\n", udev_device_get_devnode(block_device));
-			printf("\tManufacturer: %s\n", udev_device_get_sysattr_value(usb_device, "manufacturer"));
-			printf("\tProduct: %s\n", udev_device_get_sysattr_value(usb_device, "product"));
-			printf("\tSerial: %s\n", udev_device_get_sysattr_value(usb_device, "serial"));
-			printf("\tUSB bus number: %s\n", udev_device_get_sysattr_value(usb_device, "busnum"));
-			printf("\tUSB device path: %s\n", udev_device_get_sysattr_value(usb_device, "devpath"));
-			printf("\tUSB version: %s\n", udev_device_get_sysattr_value(usb_device, "version"));
-			printf("\tUSB speed: %sMbps\n", udev_device_get_sysattr_value(usb_device, "speed"));*/
-			//printf("\t%s\n", udev_device_get_sysattr_value(usb_device, "maxchild"));
 
 			//struct udev_list_entry *entry = udev_device_get_properties_list_entry(hub_device);
 
@@ -163,7 +210,7 @@ struct usb_device_list *usb_device_list_get()
 
 			//get_child_device2(udev, block_device, "block");
 
-			usb_device_list_add(list, usb_device);
+			usb_device_list_add(list, device);
 		}
 
 		//printf("\t%s\n", udev_device_get_sysattr_value(usb_device, "maxchild"));
@@ -182,7 +229,7 @@ struct usb_device_list *usb_device_list_get()
 	return list;
 }
 
-struct udev_device *usb_device_get_child(struct udev *udev, struct udev_device *parent_device, const char *subsystem)
+struct udev_device *usb_udev_device_get_child(struct udev *udev, struct udev_device *parent_device, const char *subsystem)
 {
 	struct udev_enumerate *enumerate = udev_enumerate_new(udev);
 
