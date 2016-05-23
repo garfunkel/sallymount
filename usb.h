@@ -31,6 +31,8 @@ int usb_umount_multiple(char *usb_paths[], int num_usb_paths);
 int usb_umount_all();
 
 void usb_device_list_add(struct usb_device_list *list, struct usb_device *device);
+char *usb_device_list_table_str(struct usb_device_list *list);
+size_t usb_device_list_size(struct usb_device_list *list);
 struct usb_device_list *usb_device_list_new();
 struct usb_device_list *usb_device_list_get();
 

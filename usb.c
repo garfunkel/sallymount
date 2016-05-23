@@ -1,3 +1,5 @@
+#define _GNU_SOURCE
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -6,16 +8,16 @@
 #include "usb.h"
 
 char **usb_device_to_fields(struct usb_device *device) {
-	char *[]fields = calloc(sizeof(char *), 8);
+	char **fields = calloc(sizeof(char *), 8);
 
 	fields[0] = device->node;
 	fields[1] = device->manufacturer;
 	fields[2] = device->product;
 	fields[3] = device->serial;
-	fields[4] = device->bus;
+	//fields[4] = device->bus;
 	fields[5] = device->dev_path;
 	fields[6] = device->version;
-	fields[7] = device->speed
+	fields[7] = device->speed;
 
 	return fields;
 }
@@ -88,11 +90,13 @@ int usb_print_all()
 {
 	struct usb_device_list *list = usb_device_list_get();
 
-	while (list && list->device) {
+	printf("%s\n", usb_device_list_table_str(list));
+
+	/*while (list && list->device) {
 		printf("%s\n", usb_device_to_str(list->device));
 
 		list = list->next;
-	}
+	}*/
 
 	return 0;
 }
@@ -168,6 +172,103 @@ struct usb_device_list *usb_device_list_new()
 	memset(list, 0, sizeof(struct usb_device_list));
 
 	return list;
+}
+
+static size_t usb_device_list_table_max_width_node(struct usb_device_list *list)
+{
+	size_t max = 0;
+
+	while (list && list->device) {
+		size_t size = strlen(list->device->node);
+
+		if (size > max)
+			max = size;
+
+		list = list->next;
+	}
+
+	return max;
+}
+
+static size_t usb_device_list_table_max_width_manufacturer(struct usb_device_list *list)
+{
+	size_t max = 0;
+
+	while (list && list->device) {
+		size_t size = strlen(list->device->manufacturer);
+
+		if (size > max)
+			max = size;
+
+		list = list->next;
+	}
+
+	return max;
+}
+
+static size_t usb_device_list_table_max_width_product(struct usb_device_list *list)
+{
+	size_t max = 0;
+
+	while (list && list->device) {
+		size_t size = strlen(list->device->product);
+
+		if (size > max)
+			max = size;
+
+		list = list->next;
+	}
+
+	return max;
+}
+
+char *usb_device_list_table_str(struct usb_device_list *list)
+{
+	size_t width_node = usb_device_list_table_max_width_node(list);
+	size_t width_manufacturer = usb_device_list_table_max_width_manufacturer(list);
+	size_t width_product = usb_device_list_table_max_width_product(list);
+	char *table_line_str;
+	char *table_fmt_str;
+
+	asprintf(&table_fmt_str,
+	         "%%-%lus\t%%-%lus\t%%-%lus",
+	         width_node,
+	         width_manufacturer,
+	         width_product);
+	asprintf(&table_line_str, table_fmt_str, "", "", "");
+
+	size_t list_size = usb_device_list_size(list);
+	size_t table_str_size = strlen(table_line_str) * list_size + list_size;
+
+	char *table_str = malloc(table_str_size);
+	table_str[0] = '\0';
+
+	while (list && list->device) {
+		sprintf(table_str + strlen(table_str),
+		        table_fmt_str,
+		        list->device->node,
+		        list->device->manufacturer,
+		        list->device->product);
+
+		if (list->next)
+			sprintf(table_str + strlen(table_str), "\n");
+
+		list = list->next;
+	}
+
+	return table_str;
+}
+
+size_t usb_device_list_size(struct usb_device_list *list)
+{
+	size_t size = 0;
+
+	while (list && list->device) {
+		size++;
+		list = list->next;
+	}
+
+	return size;
 }
 
 struct usb_device_list *usb_device_list_get()
