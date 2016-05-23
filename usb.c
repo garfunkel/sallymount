@@ -5,6 +5,21 @@
 
 #include "usb.h"
 
+char **usb_device_to_fields(struct usb_device *device) {
+	char *[]fields = calloc(sizeof(char *), 8);
+
+	fields[0] = device->node;
+	fields[1] = device->manufacturer;
+	fields[2] = device->product;
+	fields[3] = device->serial;
+	fields[4] = device->bus;
+	fields[5] = device->dev_path;
+	fields[6] = device->version;
+	fields[7] = device->speed
+
+	return fields;
+}
+
 char *usb_device_to_str(struct usb_device *device)
 {
 	size_t str_len = strlen(device->node) + 1 +
