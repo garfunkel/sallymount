@@ -10,7 +10,10 @@ static struct argp_option cli_options[];
 struct cli_args {
 	int verbose;
 	int all;
+	int human_readable;
 	char *command;
+	char **usb_paths;
+	size_t num_usb_paths;
 };
 
 error_t cli_parse_opt(int key, char *arg, struct argp_state *state);

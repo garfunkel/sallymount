@@ -34,6 +34,20 @@ static struct argp_option cli_options[] = {
 		"Print all USB devices"
 	},
 	{
+		"human-readable",
+		'h',
+		0,
+		0,
+		"Print sizes in powers of 1024 (e.g., 1023M)"
+	},
+	{
+		"si",
+		'H',
+		0,
+		0,
+		"Print sizes in powers of 1000 (e.g., 1.1G)"
+	},
+	{
 		0
 	}
 };
@@ -61,6 +75,16 @@ error_t cli_parse_opt(int key, char *arg, struct argp_state *state) {
 
 			break;
 
+		case 'h':
+			cli_args->human_readable = 1;
+
+			break;
+
+		case 'H':
+			cli_args->human_readable = 2;
+
+			break;
+
 		case ARGP_KEY_ARG:
 			if (strcmp(arg, "mount") == 0) {
 				cli_args->command = arg;
@@ -71,6 +95,15 @@ error_t cli_parse_opt(int key, char *arg, struct argp_state *state) {
 
 				cmd_umount(state);
 			} else {
+				for (int i = 0; i < state->argc; i++) {
+					if (!cli_args->usb_paths[i]) {
+						cli_args->usb_paths[i] = arg;
+						cli_args->num_usb_paths++;
+
+						break;
+					}
+				}
+
 				//TODO: Check for valid USB paths?
 				//argp_error(state, "%s is not a valid command", arg);
 			}
