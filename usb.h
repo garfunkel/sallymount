@@ -3,6 +3,8 @@ struct udev_device;
 
 struct usb_partition {
 	char *node;
+	int num;
+	char *dev_path;
 	size_t size;
 };
 
@@ -45,6 +47,7 @@ void usb_device_list_add(struct usb_device_list *list, struct usb_device *device
 char *usb_device_list_detail_str(struct usb_device_list *list, int human_readable);
 char *usb_device_list_table_str(struct usb_device_list *list, int human_readable);
 size_t usb_device_list_size(struct usb_device_list *list);
+size_t usb_device_and_partition_list_size(struct usb_device_list *list);
 struct usb_device_list *usb_device_list_new();
 struct usb_device_list *usb_device_list_get();
 

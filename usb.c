@@ -154,6 +154,17 @@ static size_t usb_device_list_table_max_width_node(struct usb_device_list *list)
 		if (size > max)
 			max = size;
 
+		struct usb_partition_list *partition_list = list->device->partition_list;
+
+		while (partition_list && partition_list->partition) {
+			size = strlen(partition_list->partition->node) + 4;
+
+			if (size > max)
+				max = size;
+
+			partition_list = partition_list->next;
+		}
+
 		list = list->next;
 	}
 
@@ -250,6 +261,17 @@ static size_t usb_device_list_table_max_width_dev_path(struct usb_device_list *l
 		if (size > max)
 			max = size;
 
+		struct usb_partition_list *partition_list = list->device->partition_list;
+
+		while (partition_list && partition_list->partition) {
+			size = strlen(partition_list->partition->dev_path) + 4;
+
+			if (size > max)
+				max = size;
+
+			partition_list = partition_list->next;
+		}
+
 		list = list->next;
 	}
 
@@ -304,29 +326,46 @@ char *usb_device_list_table_str(struct usb_device_list *list, int human_readable
 	size_t width_dev_path = usb_device_list_table_max_width_dev_path(list);
 	size_t width_version = usb_device_list_table_max_width_version(list);
 	size_t width_speed = usb_device_list_table_max_width_speed(list);
-	size_t list_size = usb_device_list_size(list);
+	size_t list_size = usb_device_and_partition_list_size(list);
 	size_t table_line_str_size = width_node + 1 +
+	                             width_bus + 1 +
+	                             width_dev_path + 1 +
 	                             width_size + 1 +
 	                             width_manufacturer + 1 +
 	                             width_product + 1 +
 	                             width_serial + 1 +
-	                             width_bus + 1 +
-	                             width_dev_path + 1 +
 	                             width_version + 1 +
 	                             width_speed + 1;
 	char table_fmt_str[table_line_str_size];
+	char table_partition_fmt_str[table_line_str_size];
+	char table_last_partition_fmt_str[table_line_str_size];
 
 	sprintf(table_fmt_str,
 	        "%%-%lus\t%%-%lus\t%%-%lus\t%%-%lus\t%%-%lus\t%%-%lus\t%%-%lus\t%%-%lus\t%%-%lus",
 	        width_node,
+	        width_bus,
+	        width_dev_path,
 	        width_size,
 	        width_manufacturer,
 	        width_product,
 	        width_serial,
-	        width_bus,
-	        width_dev_path,
 	        width_version,
 	        width_speed);
+
+	// Extra bytes used up by unicode not important for output buffer because not all fields are printed.
+	sprintf(table_partition_fmt_str,
+	        " ├─ %%-%lus\t%%-%lus\t%%-%lus\t%%-%lus",
+	        width_node - 4,
+	        width_bus,
+	        width_dev_path,
+	        width_size);
+
+	sprintf(table_last_partition_fmt_str,
+	        " ╰─ %%-%lus\t%%-%lus\t%%-%lus\t%%-%lus",
+	        width_node - 4,
+	        width_bus,
+	        width_dev_path,
+	        width_size);
 
 	size_t table_str_size = table_line_str_size * (list_size + 1) + list_size + 1;
 	char *table_str = malloc(table_str_size);
@@ -335,18 +374,18 @@ char *usb_device_list_table_str(struct usb_device_list *list, int human_readable
 	sprintf(table_str,
 	        table_fmt_str,
 	        TABLE_COLUMN_HEADER_NODE,
+	        TABLE_COLUMN_HEADER_BUS,
+	        TABLE_COLUMN_HEADER_DEV_PATH,
 	        TABLE_COLUMN_HEADER_SIZE,
 	        TABLE_COLUMN_HEADER_MANUFACTURER,
 	        TABLE_COLUMN_HEADER_PRODUCT,
 	        TABLE_COLUMN_HEADER_SERIAL,
-	        TABLE_COLUMN_HEADER_BUS,
-	        TABLE_COLUMN_HEADER_DEV_PATH,
 	        TABLE_COLUMN_HEADER_VERSION,
 	        TABLE_COLUMN_HEADER_SPEED);
 
 	while (list && list->device) {
 		char bus[num_digits(list->device->bus) + 1];
-		char size[num_digits(list->device->bus) + 1];
+		char size[num_digits(list->device->size) + 1];
 		sprintf(bus, "%d", list->device->bus);
 		sprintf(size, "%lu", list->device->size);
 		sprintf(table_str + strlen(table_str), "\n");
@@ -354,14 +393,39 @@ char *usb_device_list_table_str(struct usb_device_list *list, int human_readable
 		sprintf(table_str + strlen(table_str),
 		        table_fmt_str,
 		        list->device->node,
+		        bus,
+		        list->device->dev_path,
 		        size,
 		        list->device->manufacturer,
 		        list->device->product,
 		        list->device->serial,
-		        bus,
-		        list->device->dev_path,
 		        list->device->version,
 		        list->device->speed);
+
+		struct usb_partition_list *partition_list = list->device->partition_list;
+
+		while (partition_list && partition_list->partition) {
+			sprintf(size, "%lu", partition_list->partition->size);
+			sprintf(table_str + strlen(table_str), "\n");
+
+			if (partition_list->next)
+				sprintf(table_str + strlen(table_str),
+				        table_partition_fmt_str,
+				        partition_list->partition->node,
+				        "",
+				        partition_list->partition->dev_path,
+				        size);
+
+			else
+				sprintf(table_str + strlen(table_str),
+				        table_last_partition_fmt_str,
+				        partition_list->partition->node,
+				        "",
+				        partition_list->partition->dev_path,
+				        size);
+
+			partition_list = partition_list->next;
+		}
 
 		list = list->next;
 	}
@@ -375,6 +439,26 @@ size_t usb_device_list_size(struct usb_device_list *list)
 
 	while (list && list->device) {
 		size++;
+		list = list->next;
+	}
+
+	return size;
+}
+
+size_t usb_device_and_partition_list_size(struct usb_device_list *list)
+{
+	size_t size = 0;
+
+	while (list && list->device) {
+		size++;
+		struct usb_partition_list *partition_list = list->device->partition_list;
+
+		while (partition_list && partition_list->partition) {
+			size++;
+
+			partition_list = partition_list->next;
+		}
+
 		list = list->next;
 	}
 
@@ -437,8 +521,14 @@ struct usb_device_list *usb_device_list_get()
 				const char *partition_name = udev_list_entry_get_name(partition_entry);
 				struct udev_device *partition_device = udev_device_new_from_syspath(udev, partition_name);
 				struct usb_partition *partition = malloc(sizeof(struct usb_partition));
+				char *partition_num = (char *)udev_device_get_sysattr_value(partition_device, "partition");
 
 				partition->node = (char *)udev_device_get_devnode(partition_device);
+				partition->num = atoi(partition_num);
+				partition->dev_path = malloc(strlen(device->dev_path) + strlen(partition_num) + 2);
+
+				sprintf(partition->dev_path, "%s-%s", device->dev_path, partition_num);
+
 				partition->size = atol(udev_device_get_sysattr_value(partition_device, "size")) * (size_t)512;
 
 				usb_partition_list_add(device->partition_list, partition);
