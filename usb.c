@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
+#include <sys/mount.h>
 #include <libudev.h>
 
 #include "usb.h"
@@ -66,9 +67,30 @@ int usb_print_all(int verbose, int human_readable)
 	return 0;
 }
 
+static char *usb_get_partition_mount_directory(struct usb_partition *partition)
+{
+	char *mount_fmt_str = "/media/usb%s/partition%d";
+	char *mount_path = NULL;
+
+	asprintf(&mount_path,
+	         mount_fmt_str,
+	         partition->device->dev_path,
+	         partition->num);
+
+	return mount_path;
+}
+
 static int usb_mount_partition(struct usb_partition *partition)
 {
+	char *mount_path = usb_get_partition_mount_directory(partition);
+	printf("PATH: %s\n", mount_path);
+	printf("MOUNT: %s\n", partition->node);
+	int retcode = mount(partition->node, mount_path, "ntfs-3g", 0, NULL);
 
+	printf("RET: %d\n", retcode);
+	perror("");
+
+	return retcode;
 }
 
 static int usb_mount_device(struct usb_device *device)
@@ -106,6 +128,17 @@ int usb_mount_multiple(char *usb_paths[], int num_usb_paths)
 					return retcode;
 
 				break;
+			} else {
+				struct usb_partition_list *partition_list = list->device->partition_list;
+
+				while (partition_list && partition_list->partition) {
+					if (strcmp(partition_list->partition->dev_path, usb_paths[i]) == 0) {
+						if ((retcode = usb_mount_partition(partition_list->partition)) != 0)
+							return retcode;
+					}
+
+					partition_list = partition_list->next;
+				}
 			}
 		}
 
@@ -628,7 +661,6 @@ struct usb_device_list *usb_device_list_get()
 		const char *device_name = udev_list_entry_get_name(device_entry);
 		struct udev_device *scsi_device = udev_device_new_from_syspath(udev, device_name);
 		struct udev_device *usb_device = udev_device_get_parent_with_subsystem_devtype(scsi_device, "usb", "usb_device");
-		struct udev_device *hub_device = udev_device_get_parent_with_subsystem_devtype(usb_device, "usb", "usb_device");
 		struct udev_device *block_device = usb_udev_device_get_child(udev, scsi_device, "block");
 		struct udev_device *scsi_disk_device = usb_udev_device_get_child(udev, scsi_device, "scsi_disk");
 
@@ -671,6 +703,7 @@ struct usb_device_list *usb_device_list_get()
 				struct udev_device *partition_device = udev_device_new_from_syspath(udev, partition_name);
 				struct usb_partition *partition = malloc(sizeof(struct usb_partition));
 				char *partition_num = (char *)udev_device_get_sysattr_value(partition_device, "partition");
+				partition->device = device;
 				partition->node = (char *)udev_device_get_devnode(partition_device);
 				partition->sys_path = strdup((char *)udev_device_get_syspath(partition_device));
 				partition->num = atoi(partition_num);

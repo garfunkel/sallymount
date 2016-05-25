@@ -1,7 +1,7 @@
 struct udev;
-struct udev_device;
 
 struct usb_partition {
+	struct usb_device *device;
 	char *node;
 	int num;
 	char *dev_path;
