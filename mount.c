@@ -40,6 +40,21 @@ error_t cli_parse_mount(int key, char* arg, struct argp_state* state)
 			cli_args_mount->all = 1;
 
 			break;
+
+		case ARGP_KEY_ARG:
+			for (int i = 0; i < state->argc; i++) {
+				if (!cli_args_mount->usb_paths[i]) {
+					cli_args_mount->usb_paths[i] = arg;
+					cli_args_mount->num_usb_paths++;
+
+					break;
+				}
+			}
+
+			//TODO: Check for valid USB paths?
+			//argp_error(state, "%s is not a valid command", arg);
+
+			break;
 	}
 
 	return 0;
@@ -53,6 +68,7 @@ void cmd_mount(struct argp_state* state)
 	char*  argv0 =  argv[0];
 
 	cli_args_mount.cli_args = state->input;
+	cli_args_mount.usb_paths = calloc(sizeof(char *), argc);
 
 	argv[0] = malloc(strlen(state->name) + strlen("mount") + 2);
 
@@ -72,7 +88,7 @@ void cmd_mount(struct argp_state* state)
 	if (cli_args_mount.all) {
 		usb_mount_all();
 	} else {
-		usb_mount_multiple(argv + 1, argc - 1);
+		usb_mount_multiple(cli_args_mount.usb_paths, cli_args_mount.num_usb_paths);
 	}
 
 	return;
