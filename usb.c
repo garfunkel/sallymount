@@ -1,12 +1,13 @@
 #define _GNU_SOURCE
 
+#include <errno.h>
 #include <ctype.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
-#include <sys/mount.h>
 #include <libudev.h>
+#include <libmount/libmount.h>
 
 #include "usb.h"
 
@@ -85,12 +86,27 @@ static char *usb_get_partition_mount_directory(struct usb_partition *partition)
 static int usb_mount_partition(struct usb_partition *partition)
 {
 	char *mount_path = usb_get_partition_mount_directory(partition);
-	printf("PATH: %s\n", mount_path);
-	printf("MOUNT: %s\n", partition->node);
-	int retcode = mount(partition->node, mount_path, "ntfs-3g", 0, NULL);
+	struct libmnt_context *context = mnt_new_context();
 
-	printf("RET: %d\n", retcode);
-	perror("");
+	if (!context) {
+		return -ENOMEM;
+	}
+
+	if (mnt_context_set_source(context, partition->node)) {
+		mnt_free_context(context);
+
+		return -errno;
+	}
+
+	if (mnt_context_set_target(context, mount_path)) {
+		mnt_free_context(context);
+
+		return -errno;
+	}
+
+	int retcode = mnt_context_mount(context);
+
+	mnt_free_context(context);
 
 	return retcode;
 }
@@ -101,9 +117,8 @@ static int usb_mount_device(struct usb_device *device)
 	struct usb_partition_list *list = device->partition_list;
 
 	while (list && list->partition) {
-		if ((retcode = usb_mount_partition(list->partition)) != 0) {
+		if ((retcode = usb_mount_partition(list->partition)) != 0)
 			return retcode;
-		}
 
 		list = list->next;
 	}
