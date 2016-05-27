@@ -1,5 +1,5 @@
 CC=gcc
-OPT=-Wall -O3
+OPT=-Wall -g
 TARGET=sallymount
 OBJECTS=sallymount.o usb.o cli.o mount.o umount.o
 LIBS=-ludev -lm -lmount

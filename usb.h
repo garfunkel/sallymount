@@ -6,6 +6,7 @@ struct usb_partition {
 	int num;
 	char *dev_path;
 	char *label;
+	char *type;
 	char *sys_path;
 	size_t size;
 };
@@ -22,6 +23,7 @@ struct usb_device {
 	char *serial;
 	char *dev_path;
 	char *label;
+	char *type;
 	char *sys_path;
 	char *version;
 	char *speed;
