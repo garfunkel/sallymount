@@ -83,6 +83,11 @@ static char *usb_get_partition_mount_directory(struct usb_partition *partition)
 	return mount_path;
 }
 
+static int usb_create_partition_mount_directory(struct usb_partition *partition)
+{
+
+}
+
 static int usb_mount_partition(struct usb_partition *partition)
 {
 	char *mount_path = usb_get_partition_mount_directory(partition);
@@ -118,6 +123,48 @@ static int usb_mount_device(struct usb_device *device)
 
 	while (list && list->partition) {
 		if ((retcode = usb_mount_partition(list->partition)) != 0)
+			return retcode;
+
+		list = list->next;
+	}
+
+	return retcode;
+}
+
+static int usb_umount_partition(struct usb_partition *partition)
+{
+	char *mount_path = usb_get_partition_mount_directory(partition);
+	int retcode = 0;
+
+	if ((retcode = usb_create_partition_mount_directory(mount_path)))
+		return retcode;
+
+	struct libmnt_context *context = mnt_new_context();
+
+	if (!context) {
+		return -ENOMEM;
+	}
+
+	if (mnt_context_set_target(context, mount_path)) {
+		mnt_free_context(context);
+
+		return -errno;
+	}
+
+	retcode = mnt_context_umount(context);
+
+	mnt_free_context(context);
+
+	return retcode;
+}
+
+static int usb_umount_device(struct usb_device *device)
+{
+	int retcode = 0;
+	struct usb_partition_list *list = device->partition_list;
+
+	while (list && list->partition) {
+		if ((retcode = usb_umount_partition(list->partition)) != 0)
 			return retcode;
 
 		list = list->next;
@@ -182,27 +229,56 @@ int usb_mount_all()
 
 int usb_umount(char *usb_path)
 {
-	printf("UMOUNT %s\n", usb_path);
+	char *usb_paths[1] = {usb_path};
 
-	return 0;
+	return usb_umount_multiple(usb_paths, 1);
 }
 
 int usb_umount_multiple(char *usb_paths[], int num_usb_paths)
 {
-	int ret_code = 0;
+	int retcode = 0;
+	struct usb_device_list *list = usb_device_list_get();
 
-	for (int i = 0; i < num_usb_paths; i++)
-		if ((ret_code = usb_umount(usb_paths[i])) != 0)
-			break;
+	while (list && list->device) {
+		for (int i = 0; i < num_usb_paths; i++) {
+			if (strcmp(list->device->dev_path, usb_paths[i]) == 0) {
+				if ((retcode = usb_umount_device(list->device)) != 0)
+					return retcode;
 
-	return ret_code;
+				break;
+			} else {
+				struct usb_partition_list *partition_list = list->device->partition_list;
+
+				while (partition_list && partition_list->partition) {
+					if (strcmp(partition_list->partition->dev_path, usb_paths[i]) == 0) {
+						if ((retcode = usb_umount_partition(partition_list->partition)) != 0)
+							return retcode;
+					}
+
+					partition_list = partition_list->next;
+				}
+			}
+		}
+
+		list = list->next;
+	}
+
+	return retcode;
 }
 
 int usb_umount_all()
 {
-	printf("UMOUNT ALL\n");
+	int retcode = 0;
+	struct usb_device_list *list = usb_device_list_get();
 
-	return 0;
+	while (list && list->device) {
+		if ((retcode = usb_umount_device(list->device)) != 0)
+			return retcode;
+
+		list = list->next;
+	}
+
+	return retcode;
 }
 
 static size_t num_digits(long num)
