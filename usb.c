@@ -1,5 +1,7 @@
 #define _GNU_SOURCE
 
+#include <unistd.h>
+#include <err.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <errno.h>
@@ -12,6 +14,8 @@
 #include <libmount/libmount.h>
 
 #include "usb.h"
+
+static const char *MOUNT_DIR_PREFIX = "/media";
 
 static const char *TABLE_COLUMN_HEADER_NODE = "NODE";
 static const char *TABLE_COLUMN_HEADER_MANUFACTURER = "MANUFACTURER";
@@ -48,6 +52,21 @@ int usb_print_multiple(char *usb_paths[], int num_usb_paths, int verbose, int hu
 				break;
 			}
 
+			struct usb_partition_list *partition_list = list->device->partition_list;
+
+			while (partition_list && partition_list->partition) {
+				if (strcmp(partition_list->partition->dev_path, usb_paths[i]) == 0) {
+					usb_device_list_add(list_to_print, list->device);
+
+					break;
+				}
+
+				partition_list = partition_list->next;
+			}
+
+			if (partition_list)
+				break;
+
 			list = list->next;
 		}
 	}
@@ -76,11 +95,12 @@ int usb_print_all(int verbose, int human_readable)
 
 static char *usb_get_partition_mount_directory(struct usb_partition *partition)
 {
-	char *mount_fmt_str = "/media/usb%s/partition%d";
+	char *mount_fmt_str = "%s/usb%s/partition%d";
 	char *mount_path = NULL;
 
 	asprintf(&mount_path,
 	         mount_fmt_str,
+	         MOUNT_DIR_PREFIX,
 	         partition->device->dev_path,
 	         partition->num);
 
@@ -101,8 +121,46 @@ static int usb_create_partition_mount_directory(char *mount_path)
 			umask(mode);
 
 			if ((retcode = mkdir(mount_path, 0777 - mode))) {
-				if (errno != EEXIST)
+				if (errno == EEXIST) {
+					errno = 0;
+					retcode = 0;
+				} else {
 					return retcode;
+				}
+			}
+
+			if (mount_path[i] == '\0')
+				mount_path[i] = '/';
+		}
+	}
+
+	return retcode;
+}
+
+static int usb_delete_partition_mount_directory(char *mount_path)
+{
+	int size = strlen(mount_path);
+	int retcode = 0;
+
+	for (int i = size - 1; i >= 0; i--) {
+		if (mount_path[i] == '/' || i == (size - 1)) {
+			if (mount_path[i] == '/') {
+				mount_path[i] = '\0';
+			}
+
+			if (strcmp(mount_path, MOUNT_DIR_PREFIX) == 0) {
+				mount_path[i] = '/';
+
+				break;
+			}
+
+			if ((retcode = rmdir(mount_path))) {
+				if (errno == ENOENT || errno == ENOTEMPTY) {
+					errno = 0;
+					retcode = 0;
+				} else {
+					return retcode;
+				}
 			}
 
 			if (mount_path[i] == '\0')
@@ -115,32 +173,49 @@ static int usb_create_partition_mount_directory(char *mount_path)
 
 static int usb_mount_partition(struct usb_partition *partition)
 {
-	char *mount_path = usb_get_partition_mount_directory(partition);
 	struct libmnt_context *context = mnt_new_context();
-	int retcode = 0;
-
-	if ((retcode = usb_create_partition_mount_directory(mount_path)))
-		return retcode;
 
 	if (!context) {
-		return -ENOMEM;
+		perror("mnt_new_context()");
+
+		exit(EXIT_FAILURE);
 	}
 
-	if (mnt_context_set_source(context, partition->node)) {
-		mnt_free_context(context);
+	char *mount_path = usb_get_partition_mount_directory(partition);
+	int retcode = 0;
 
-		return -errno;
+	if ((retcode = usb_create_partition_mount_directory(mount_path))) {
+		return retcode;
 	}
 
-	if (mnt_context_set_target(context, mount_path)) {
+	if ((retcode = mnt_context_set_source(context, partition->node))) {
 		mnt_free_context(context);
 
-		return -errno;
+		return retcode;
+	}
+
+	if ((retcode = mnt_context_set_target(context, mount_path))) {
+		mnt_free_context(context);
+
+		return retcode;
+	}
+
+	struct libmnt_fs *fs = mnt_context_get_fs(context);
+	int mounted = 0;
+
+	if ((retcode = mnt_context_is_fs_mounted(context, fs, &mounted))) {
+		mnt_free_context(context);
+
+		return retcode;
+	}
+
+	if (mounted){
+		errno = EBUSY;
+
+		return EBUSY;
 	}
 
 	retcode = mnt_context_mount(context);
-
-	printf("%d\n", retcode);
 
 	mnt_free_context(context);
 
@@ -150,11 +225,15 @@ static int usb_mount_partition(struct usb_partition *partition)
 static int usb_mount_device(struct usb_device *device)
 {
 	int retcode = 0;
+	int mount_retcode = 0;
 	struct usb_partition_list *list = device->partition_list;
 
 	while (list && list->partition) {
-		if ((retcode = usb_mount_partition(list->partition)) != 0)
-			return retcode;
+		if ((mount_retcode = usb_mount_partition(list->partition))) {
+			warn("Mounting partition %s failed", list->partition->node);
+
+			retcode = mount_retcode;
+		}
 
 		list = list->next;
 	}
@@ -164,22 +243,50 @@ static int usb_mount_device(struct usb_device *device)
 
 static int usb_umount_partition(struct usb_partition *partition)
 {
-	char *mount_path = usb_get_partition_mount_directory(partition);
 	struct libmnt_context *context = mnt_new_context();
 
 	if (!context) {
-		return -ENOMEM;
+		perror("mnt_new_context()");
+
+		exit(EXIT_FAILURE);
 	}
 
-	if (mnt_context_set_target(context, mount_path)) {
+	char *mount_path = usb_get_partition_mount_directory(partition);
+	int retcode = 0;
+
+	if ((retcode = mnt_context_set_source(context, partition->node))) {
 		mnt_free_context(context);
 
-		return -errno;
+		return retcode;
 	}
 
-	int retcode = mnt_context_umount(context);
+	if ((retcode = mnt_context_set_target(context, mount_path))) {
+		mnt_free_context(context);
+
+		return retcode;
+	}
+
+	struct libmnt_fs *fs = mnt_context_get_fs(context);
+	int mounted = 0;
+
+	if ((retcode = mnt_context_is_fs_mounted(context, fs, &mounted))) {
+		mnt_free_context(context);
+
+		return retcode;
+	}
+
+	if (!mounted){
+		warnx("Unmounting partition %s failed: Not mounted", partition->node);
+	} else {
+		retcode = mnt_context_umount(context);
+	}
 
 	mnt_free_context(context);
+
+	if (retcode)
+		return retcode;
+
+	retcode = usb_delete_partition_mount_directory(mount_path);
 
 	return retcode;
 }
@@ -187,11 +294,15 @@ static int usb_umount_partition(struct usb_partition *partition)
 static int usb_umount_device(struct usb_device *device)
 {
 	int retcode = 0;
+	int umount_retcode = 0;
 	struct usb_partition_list *list = device->partition_list;
 
 	while (list && list->partition) {
-		if ((retcode = usb_umount_partition(list->partition)) != 0)
-			return retcode;
+		if ((umount_retcode = usb_umount_partition(list->partition))) {
+			warn("Unmounting partition %s failed", list->partition->node);
+
+			retcode = umount_retcode;
+		}
 
 		list = list->next;
 	}
@@ -209,13 +320,15 @@ int usb_mount(char *usb_path)
 int usb_mount_multiple(char *usb_paths[], int num_usb_paths)
 {
 	int retcode = 0;
+	int mount_retcode = 0;
 	struct usb_device_list *list = usb_device_list_get();
 
 	while (list && list->device) {
 		for (int i = 0; i < num_usb_paths; i++) {
 			if (strcmp(list->device->dev_path, usb_paths[i]) == 0) {
-				if ((retcode = usb_mount_device(list->device)) != 0)
-					return retcode;
+				if ((mount_retcode = usb_mount_device(list->device))) {
+					retcode = mount_retcode;
+				}
 
 				break;
 			} else {
@@ -223,8 +336,11 @@ int usb_mount_multiple(char *usb_paths[], int num_usb_paths)
 
 				while (partition_list && partition_list->partition) {
 					if (strcmp(partition_list->partition->dev_path, usb_paths[i]) == 0) {
-						if ((retcode = usb_mount_partition(partition_list->partition)) != 0)
-							return retcode;
+						if ((mount_retcode = usb_mount_partition(partition_list->partition))) {
+							warn("Mounting partition %s failed", partition_list->partition->node);
+
+							retcode = mount_retcode;
+						}
 					}
 
 					partition_list = partition_list->next;
@@ -853,6 +969,8 @@ struct usb_device_list *usb_device_list_get()
 		struct udev_device *usb_device = udev_device_get_parent_with_subsystem_devtype(scsi_device, "usb", "usb_device");
 		struct udev_device *block_device = usb_udev_device_get_child(udev, scsi_device, "block");
 		struct udev_device *scsi_disk_device = usb_udev_device_get_child(udev, scsi_device, "scsi_disk");
+
+		errno = 0;
 
 		if (usb_device && block_device && scsi_disk_device) {
 			struct usb_device *device = malloc(sizeof(struct usb_device));
