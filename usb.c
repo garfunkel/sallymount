@@ -3,11 +3,9 @@
 #include <unistd.h>
 #include <err.h>
 #include <sys/stat.h>
-#include <sys/types.h>
 #include <errno.h>
 #include <ctype.h>
 #include <stdlib.h>
-#include <stdio.h>
 #include <string.h>
 #include <math.h>
 #include <libudev.h>
@@ -17,16 +15,106 @@
 
 static const char *MOUNT_DIR_PREFIX = "/media";
 
-static const char *TABLE_COLUMN_HEADER_NODE = "NODE";
-static const char *TABLE_COLUMN_HEADER_MANUFACTURER = "MANUFACTURER";
-static const char *TABLE_COLUMN_HEADER_PRODUCT = "PRODUCT";
-static const char *TABLE_COLUMN_HEADER_SIZE = "SIZE";
-static const char *TABLE_COLUMN_HEADER_LABEL = "LABEL";
-static const char *TABLE_COLUMN_HEADER_TYPE = "TYPE";
-static const char *TABLE_COLUMN_HEADER_DEV_PATH = "DEV_PATH";
-static const char *TABLE_COLUMN_CELL_NONE = "(none)";
-static const char *TABLE_COLUMN_CELL_NA = "(n/a)";
-static const char *TABLE_COLUMN_CELL_UNKNOWN = "(unknown)";
+static const char *HEADER_NODE = "NODE";
+static const char *HEADER_MANUFACTURER = "MANUFACTURER";
+static const char *HEADER_PRODUCT = "PRODUCT";
+static const char *HEADER_SIZE = "SIZE";
+static const char *HEADER_LABEL = "LABEL";
+static const char *HEADER_TYPE = "TYPE";
+static const char *HEADER_BUS = "BUS";
+static const char *HEADER_DEV_PATH = "DEV_PATH";
+static const char *HEADER_SYS_PATH = "SYS_PATH";
+static const char *HEADER_SERIAL = "SERIAL";
+static const char *HEADER_VERSION = "VERSION";
+static const char *HEADER_SPEED = "SPEED";
+static const char *HEADER_PARTITION = "PARTITION";
+
+static const char *CELL_NONE = "(none)";
+static const char *CELL_NA = "(n/a)";
+static const char *CELL_UNKNOWN = "(unknown)";
+
+struct usb_partition {
+	struct usb_device *device;
+	char *node;
+	int num;
+	char *dev_path;
+	char *label;
+	char *type;
+	char *sys_path;
+	size_t size;
+};
+
+struct usb_partition_list {
+	struct usb_partition *partition;
+	struct usb_partition_list *next;
+};
+
+struct usb_device {
+	char *node;
+	char *manufacturer;
+	char *product;
+	char *serial;
+	char *dev_path;
+	char *label;
+	char *type;
+	char *sys_path;
+	char *version;
+	char *speed;
+	int bus;
+	size_t size;
+	size_t max_children;
+	struct usb_partition_list *partition_list;
+};
+
+struct usb_device_list {
+	struct usb_device *device;
+	struct usb_device_list *next;
+};
+
+static struct usb_device *usb_device_new();
+static void usb_device_free(struct usb_device *device);
+
+static struct usb_partition *usb_partition_new();
+static void usb_partition_free(struct usb_partition *partition);
+
+static struct usb_device_list *usb_device_list_new();
+static struct usb_device_list *usb_device_list_get();
+static void usb_device_list_add(struct usb_device_list *list, struct usb_device *device);
+static void usb_device_list_free(struct usb_device_list *list);
+static char *usb_device_list_detail_str(struct usb_device_list *list, int human_readable);
+static char *usb_device_list_table_str(struct usb_device_list *list, int human_readable);
+static char *usb_device_list_table_label_formatter(const char *str);
+static char *usb_device_list_table_type_formatter(const char *str);
+
+static struct usb_partition_list *usb_partition_list_new();
+static void usb_partition_list_add(struct usb_partition_list *list,
+                                   struct usb_partition *partition);
+static void usb_partition_list_free(struct usb_partition_list *list);
+
+static size_t usb_device_and_partition_list_size(struct usb_device_list *list);
+static char *usb_get_partition_mount_directory(struct usb_partition *partition);
+static int usb_create_partition_mount_directory(char *mount_path);
+static int usb_delete_partition_mount_directory(char *mount_path);
+static int usb_mount_device(struct usb_device *device);
+static int usb_mount_partition(struct usb_partition *partition);
+static int usb_umount_device(struct usb_device *device);
+static int usb_umount_partition(struct usb_partition *partition);
+
+static size_t usb_device_list_table_max_width_dev_path(struct usb_device_list *list);
+static size_t usb_device_list_table_max_width_label(struct usb_device_list *list);
+static size_t usb_device_list_table_max_width_manufacturer(struct usb_device_list *list);
+static size_t usb_device_list_table_max_width_node(struct usb_device_list *list);
+static size_t usb_device_list_table_max_width_product(struct usb_device_list *list);
+static size_t usb_device_list_table_max_width_size(struct usb_device_list *list,
+                                                   int human_readable_mode);
+static size_t usb_device_list_table_max_width_type(struct usb_device_list *list);
+
+static struct udev_device *usb_udev_device_get_child(struct udev *udev,
+                                                     struct udev_device *parent_device,
+                                                     const char *subsystem);
+
+static char *human_readable_size(size_t num_bytes, int human_readable_mode);
+static char *trim(char *str);
 
 int usb_print(char *usb_path, int verbose, int human_readable)
 {
@@ -199,16 +287,24 @@ static int usb_mount_partition(struct usb_partition *partition)
 	int retcode = 0;
 
 	if ((retcode = usb_create_partition_mount_directory(mount_path))) {
+		free(mount_path);
+
+		mnt_free_context(context);
+
 		return retcode;
 	}
 
 	if ((retcode = mnt_context_set_source(context, partition->node))) {
+		free(mount_path);
+
 		mnt_free_context(context);
 
 		return retcode;
 	}
 
 	if ((retcode = mnt_context_set_target(context, mount_path))) {
+		free(mount_path);
+
 		mnt_free_context(context);
 
 		return retcode;
@@ -218,16 +314,24 @@ static int usb_mount_partition(struct usb_partition *partition)
 	int mounted = 0;
 
 	if ((retcode = mnt_context_is_fs_mounted(context, fs, &mounted))) {
+		free(mount_path);
+
 		mnt_free_context(context);
 
 		return retcode;
 	}
 
 	if (mounted){
+		free(mount_path);
+
+		mnt_free_context(context);
+
 		errno = EBUSY;
 
 		return EBUSY;
 	}
+
+	free(mount_path);
 
 	retcode = mnt_context_mount(context);
 
@@ -269,12 +373,16 @@ static int usb_umount_partition(struct usb_partition *partition)
 	int retcode = 0;
 
 	if ((retcode = mnt_context_set_source(context, partition->node))) {
+		free(mount_path);
+
 		mnt_free_context(context);
 
 		return retcode;
 	}
 
 	if ((retcode = mnt_context_set_target(context, mount_path))) {
+		free(mount_path);
+
 		mnt_free_context(context);
 
 		return retcode;
@@ -284,6 +392,8 @@ static int usb_umount_partition(struct usb_partition *partition)
 	int mounted = 0;
 
 	if ((retcode = mnt_context_is_fs_mounted(context, fs, &mounted))) {
+		free(mount_path);
+
 		mnt_free_context(context);
 
 		return retcode;
@@ -297,10 +407,15 @@ static int usb_umount_partition(struct usb_partition *partition)
 
 	mnt_free_context(context);
 
-	if (retcode)
+	if (retcode) {
+		free(mount_path);
+
 		return retcode;
+	}
 
 	retcode = usb_delete_partition_mount_directory(mount_path);
+
+	free(mount_path);
 
 	return retcode;
 }
@@ -333,16 +448,16 @@ int usb_mount(char *usb_path)
 
 int usb_mount_multiple(char *usb_paths[], int num_usb_paths)
 {
+	struct usb_device_list *list = usb_device_list_get();
+	struct usb_device_list *head = list;
 	int retcode = 0;
 	int mount_retcode = 0;
-	struct usb_device_list *list = usb_device_list_get();
 
 	while (list && list->device) {
 		for (int i = 0; i < num_usb_paths; i++) {
 			if (strcmp(list->device->dev_path, usb_paths[i]) == 0) {
-				if ((mount_retcode = usb_mount_device(list->device))) {
+				if ((mount_retcode = usb_mount_device(list->device)))
 					retcode = mount_retcode;
-				}
 
 				break;
 			} else {
@@ -365,20 +480,26 @@ int usb_mount_multiple(char *usb_paths[], int num_usb_paths)
 		list = list->next;
 	}
 
+	usb_device_list_free(head);
+
 	return retcode;
 }
 
 int usb_mount_all()
 {
 	int retcode = 0;
+	int mount_retcode = 0;
 	struct usb_device_list *list = usb_device_list_get();
+	struct usb_device_list *head = list;
 
 	while (list && list->device) {
-		if ((retcode = usb_mount_device(list->device)) != 0)
-			return retcode;
+		if ((mount_retcode = usb_mount_device(list->device)))
+			retcode = mount_retcode;
 
 		list = list->next;
 	}
+
+	usb_device_list_free(head);
 
 	return retcode;
 }
@@ -393,13 +514,15 @@ int usb_umount(char *usb_path)
 int usb_umount_multiple(char *usb_paths[], int num_usb_paths)
 {
 	int retcode = 0;
+	int umount_retcode = 0;
 	struct usb_device_list *list = usb_device_list_get();
+	struct usb_device_list *head = list;
 
 	while (list && list->device) {
 		for (int i = 0; i < num_usb_paths; i++) {
 			if (strcmp(list->device->dev_path, usb_paths[i]) == 0) {
-				if ((retcode = usb_umount_device(list->device)) != 0)
-					return retcode;
+				if ((umount_retcode = usb_umount_device(list->device)))
+					retcode = umount_retcode;
 
 				break;
 			} else {
@@ -407,8 +530,10 @@ int usb_umount_multiple(char *usb_paths[], int num_usb_paths)
 
 				while (partition_list && partition_list->partition) {
 					if (strcmp(partition_list->partition->dev_path, usb_paths[i]) == 0) {
-						if ((retcode = usb_umount_partition(partition_list->partition)) != 0)
-							return retcode;
+						if ((umount_retcode = usb_umount_partition(partition_list->partition)) != 0)
+							warn("Unmounting partition %s failed", partition_list->partition->node);
+
+							retcode = umount_retcode;
 					}
 
 					partition_list = partition_list->next;
@@ -419,20 +544,26 @@ int usb_umount_multiple(char *usb_paths[], int num_usb_paths)
 		list = list->next;
 	}
 
+	usb_device_list_free(head);
+
 	return retcode;
 }
 
 int usb_umount_all()
 {
 	int retcode = 0;
+	int umount_retcode = 0;
 	struct usb_device_list *list = usb_device_list_get();
+	struct usb_device_list *head = list;
 
 	while (list && list->device) {
-		if ((retcode = usb_umount_device(list->device)) != 0)
-			return retcode;
+		if ((umount_retcode = usb_umount_device(list->device)))
+			retcode = umount_retcode;
 
 		list = list->next;
 	}
+
+	usb_device_list_free(head);
 
 	return retcode;
 }
@@ -473,7 +604,7 @@ static char *human_readable_size(size_t num_bytes, int human_readable_mode)
 	}
 
 	int i = 0;
-	double size = num_bytes;
+	long double size = num_bytes;
 
 	while (suffixes[i] != NULL) {
 		size /= power;
@@ -484,7 +615,7 @@ static char *human_readable_size(size_t num_bytes, int human_readable_mode)
 		i++;
 	}
 
-	asprintf(&human_readable_size, "%G%s", floor(size), suffixes[i]);
+	asprintf(&human_readable_size, "%lu%s", (size_t)size, suffixes[i]);
 
 	return human_readable_size;
 }
@@ -509,7 +640,7 @@ static char *trim(char *str)
 	return str;
 }
 
-void usb_device_list_add(struct usb_device_list *list, struct usb_device *device)
+static void usb_device_list_add(struct usb_device_list *list, struct usb_device *device)
 {
 	if (!list->device) {
 		list->device = device;
@@ -523,7 +654,7 @@ void usb_device_list_add(struct usb_device_list *list, struct usb_device *device
 	}
 }
 
-struct usb_device_list *usb_device_list_new()
+static struct usb_device_list *usb_device_list_new()
 {
 	struct usb_device_list *list = malloc(sizeof(struct usb_device_list));
 
@@ -534,7 +665,7 @@ struct usb_device_list *usb_device_list_new()
 
 static size_t usb_device_list_table_max_width_node(struct usb_device_list *list)
 {
-	size_t max = strlen(TABLE_COLUMN_HEADER_NODE);
+	size_t max = strlen(HEADER_NODE);
 
 	while (list && list->device) {
 		size_t size = strlen(list->device->node);
@@ -561,8 +692,8 @@ static size_t usb_device_list_table_max_width_node(struct usb_device_list *list)
 
 static size_t usb_device_list_table_max_width_manufacturer(struct usb_device_list *list)
 {
-	size_t max = strlen(TABLE_COLUMN_HEADER_MANUFACTURER);
-	size_t size = strlen(TABLE_COLUMN_CELL_NA);
+	size_t max = strlen(HEADER_MANUFACTURER);
+	size_t size = strlen(CELL_NA);
 
 	if (size > max)
 		max = size;
@@ -581,8 +712,8 @@ static size_t usb_device_list_table_max_width_manufacturer(struct usb_device_lis
 
 static size_t usb_device_list_table_max_width_product(struct usb_device_list *list)
 {
-	size_t max = strlen(TABLE_COLUMN_HEADER_PRODUCT);
-	size_t size = strlen(TABLE_COLUMN_CELL_NA);
+	size_t max = strlen(HEADER_PRODUCT);
+	size_t size = strlen(CELL_NA);
 
 	if (size > max)
 		max = size;
@@ -599,9 +730,10 @@ static size_t usb_device_list_table_max_width_product(struct usb_device_list *li
 	return max;
 }
 
-static size_t usb_device_list_table_max_width_size(struct usb_device_list *list, int human_readable_mode)
+static size_t usb_device_list_table_max_width_size(struct usb_device_list *list,
+                                                   int human_readable_mode)
 {
-	size_t max = strlen(TABLE_COLUMN_HEADER_SIZE);
+	size_t max = strlen(HEADER_SIZE);
 	char *size_str = NULL;
 
 	while (list && list->device) {
@@ -633,8 +765,8 @@ static size_t usb_device_list_table_max_width_size(struct usb_device_list *list,
 
 static size_t usb_device_list_table_max_width_label(struct usb_device_list *list)
 {
-	size_t max = strlen(TABLE_COLUMN_HEADER_LABEL);
-	size_t size = strlen(TABLE_COLUMN_CELL_NONE);
+	size_t max = strlen(HEADER_LABEL);
+	size_t size = strlen(CELL_NONE);
 
 	if (size > max)
 		max = size;
@@ -664,8 +796,8 @@ static size_t usb_device_list_table_max_width_label(struct usb_device_list *list
 
 static size_t usb_device_list_table_max_width_type(struct usb_device_list *list)
 {
-	size_t max = strlen(TABLE_COLUMN_HEADER_TYPE);
-	size_t size = strlen(TABLE_COLUMN_CELL_UNKNOWN);
+	size_t max = strlen(HEADER_TYPE);
+	size_t size = strlen(CELL_UNKNOWN);
 
 	if (size > max)
 		max = size;
@@ -695,7 +827,7 @@ static size_t usb_device_list_table_max_width_type(struct usb_device_list *list)
 
 static size_t usb_device_list_table_max_width_dev_path(struct usb_device_list *list)
 {
-	size_t max = strlen(TABLE_COLUMN_HEADER_DEV_PATH);
+	size_t max = strlen(HEADER_DEV_PATH);
 
 	while (list && list->device) {
 		size_t size = strlen(list->device->dev_path);
@@ -720,7 +852,7 @@ static size_t usb_device_list_table_max_width_dev_path(struct usb_device_list *l
 	return max;
 }
 
-char *usb_device_list_detail_str(struct usb_device_list *list, int human_readable_mode)
+static char *usb_device_list_detail_str(struct usb_device_list *list, int human_readable_mode)
 {
 	char *detail_str = NULL;
 	char *old_detail_str = NULL;
@@ -732,30 +864,42 @@ char *usb_device_list_detail_str(struct usb_device_list *list, int human_readabl
 
 		asprintf(&detail_str,
 		         "%s"
-		         "NODE:        \t%s\n"
-		         "BUS:         \t%d\n"
-		         "DEV_PATH:    \t%s\n"
-		         "SIZE:        \t%s\n"
-		         "LABEL:       \t%s\n"
-		         "TYPE:        \t%s\n"
-		         "MANUFACTURER:\t%s\n"
-		         "PRODUCT:     \t%s\n"
-		         "SERIAL:      \t%s\n"
-		         "SYS_PATH:    \t%s\n"
-		         "VERSION:     \t%s\n"
-		         "SPEED:       \t%s",
+		         "%s:        \t%s\n"
+		         "%s:         \t%d\n"
+		         "%s:    \t%s\n"
+		         "%s:        \t%s\n"
+		         "%s:       \t%s\n"
+		         "%s:        \t%s\n"
+		         "%s:\t%s\n"
+		         "%s:     \t%s\n"
+		         "%s:      \t%s\n"
+		         "%s:    \t%s\n"
+		         "%s:     \t%s\n"
+		         "%s:       \t%s",
 		         old_detail_str,
+		         HEADER_NODE,
 		         list->device->node,
+		         HEADER_BUS,
 		         list->device->bus,
+		         HEADER_DEV_PATH,
 		         list->device->dev_path,
+		         HEADER_SIZE,
 		         size,
+		         HEADER_LABEL,
 		         list->device->label,
+		         HEADER_TYPE,
 		         list->device->type,
+		         HEADER_MANUFACTURER,
 		         list->device->manufacturer,
+		         HEADER_PRODUCT,
 		         list->device->product,
+		         HEADER_SERIAL,
 		         list->device->serial,
+		         HEADER_SYS_PATH,
 		         list->device->sys_path,
+		         HEADER_VERSION,
 		         trim(list->device->version),
+		         HEADER_SPEED,
 		         list->device->speed);
 
 		free(old_detail_str);
@@ -769,18 +913,24 @@ char *usb_device_list_detail_str(struct usb_device_list *list, int human_readabl
 
 			asprintf(&detail_str,
 			        "%s\n"
-			        "PARTITION:   \t%d\n"
-			        "    NODE:    \t    %s\n"
-			        "    SIZE:    \t    %s\n"
-			        "    LABEL:   \t    %s\n"
-			        "    TYPE:    \t    %s\n"
-			        "    SYS_PATH:\t    %s",
+			        "%s:   \t%d\n"
+			        "    %s:    \t    %s\n"
+			        "    %s:    \t    %s\n"
+			        "    %s:   \t    %s\n"
+			        "    %s:    \t    %s\n"
+			        "    %s:\t    %s",
 			        old_detail_str,
+			        HEADER_PARTITION,
 			        partition_list->partition->num,
+			        HEADER_NODE,
 			        partition_list->partition->node,
+			        HEADER_SIZE,
 			        size,
+			        HEADER_LABEL,
 			        partition_list->partition->label,
+			        HEADER_TYPE,
 			        partition_list->partition->type,
+			        HEADER_SYS_PATH,
 			        partition_list->partition->sys_path);
 
 			free(old_detail_str);
@@ -808,7 +958,7 @@ char *usb_device_list_detail_str(struct usb_device_list *list, int human_readabl
 static char *usb_device_list_table_label_formatter(const char *str)
 {
 	if (strlen(str) == 0)
-		return (char *)TABLE_COLUMN_CELL_NONE;
+		return (char *)CELL_NONE;
 
 	else
 		return (char *)str;
@@ -817,13 +967,13 @@ static char *usb_device_list_table_label_formatter(const char *str)
 static char *usb_device_list_table_type_formatter(const char *str)
 {
 	if (strlen(str) == 0)
-		return (char *)TABLE_COLUMN_CELL_UNKNOWN;
+		return (char *)CELL_UNKNOWN;
 
 	else
 		return (char *)str;
 }
 
-char *usb_device_list_table_str(struct usb_device_list *list, int human_readable_mode)
+static char *usb_device_list_table_str(struct usb_device_list *list, int human_readable_mode)
 {
 	size_t width_node = usb_device_list_table_max_width_node(list);
 	size_t width_size = usb_device_list_table_max_width_size(list, human_readable_mode);
@@ -872,13 +1022,13 @@ char *usb_device_list_table_str(struct usb_device_list *list, int human_readable
 
 	sprintf(table_str,
 	        table_fmt_str,
-	        TABLE_COLUMN_HEADER_NODE,
-	        TABLE_COLUMN_HEADER_DEV_PATH,
-	        TABLE_COLUMN_HEADER_SIZE,
-	        TABLE_COLUMN_HEADER_LABEL,
-	        TABLE_COLUMN_HEADER_TYPE,
-	        TABLE_COLUMN_HEADER_MANUFACTURER,
-	        TABLE_COLUMN_HEADER_PRODUCT);
+	        HEADER_NODE,
+	        HEADER_DEV_PATH,
+	        HEADER_SIZE,
+	        HEADER_LABEL,
+	        HEADER_TYPE,
+	        HEADER_MANUFACTURER,
+	        HEADER_PRODUCT);
 
 	while (list && list->device) {
 		char *size = human_readable_size(list->device->size, human_readable_mode);
@@ -941,19 +1091,7 @@ char *usb_device_list_table_str(struct usb_device_list *list, int human_readable
 	return table_str;
 }
 
-size_t usb_device_list_size(struct usb_device_list *list)
-{
-	size_t size = 0;
-
-	while (list && list->device) {
-		size++;
-		list = list->next;
-	}
-
-	return size;
-}
-
-size_t usb_device_and_partition_list_size(struct usb_device_list *list)
+static size_t usb_device_and_partition_list_size(struct usb_device_list *list)
 {
 	size_t size = 0;
 
@@ -973,14 +1111,33 @@ size_t usb_device_and_partition_list_size(struct usb_device_list *list)
 	return size;
 }
 
-struct usb_device_list *usb_device_list_get()
+static struct udev_device *usb_udev_device_get_child(struct udev *udev,
+                                                     struct udev_device *parent_device,
+                                                     const char *subsystem)
+{
+	struct udev_enumerate *enumerate = udev_enumerate_new(udev);
+
+	udev_enumerate_add_match_parent(enumerate, parent_device);
+	udev_enumerate_add_match_subsystem(enumerate, subsystem);
+	udev_enumerate_scan_devices(enumerate);
+
+	struct udev_list_entry *device_entry = udev_enumerate_get_list_entry(enumerate);
+	const char *device_name = udev_list_entry_get_name(device_entry);
+	struct udev_device *child_device = udev_device_new_from_syspath(udev, device_name);
+
+	udev_enumerate_unref(enumerate);
+
+	return child_device;
+}
+
+static struct usb_device_list *usb_device_list_get()
 {
 	struct udev *udev = udev_new();
 
 	if (!udev) {
 		perror("udev_new() failed");
 
-		exit(1);
+		exit(EXIT_FAILURE);
 	}
 
 	struct udev_enumerate *enumerate = udev_enumerate_new(udev);
@@ -995,17 +1152,21 @@ struct usb_device_list *usb_device_list_get()
 	while (device_entry) {
 		const char *device_name = udev_list_entry_get_name(device_entry);
 		struct udev_device *scsi_device = udev_device_new_from_syspath(udev, device_name);
-		struct udev_device *usb_device = udev_device_get_parent_with_subsystem_devtype(scsi_device, "usb", "usb_device");
+		struct udev_device *usb_device = udev_device_get_parent_with_subsystem_devtype(scsi_device,
+		                                                                               "usb",
+		                                                                               "usb_device");
 		struct udev_device *block_device = usb_udev_device_get_child(udev, scsi_device, "block");
-		struct udev_device *scsi_disk_device = usb_udev_device_get_child(udev, scsi_device, "scsi_disk");
+		struct udev_device *scsi_disk_device = usb_udev_device_get_child(udev, scsi_device,
+		                                                                 "scsi_disk");
 
 		errno = 0;
 
 		if (usb_device && block_device && scsi_disk_device) {
-			struct usb_device *device = malloc(sizeof(struct usb_device));
+			struct usb_device *device = usb_device_new();
 
 			device->node = strdup((char *)udev_device_get_devnode(block_device));
-			device->manufacturer = strdup((char *)udev_device_get_sysattr_value(usb_device, "manufacturer"));
+			device->manufacturer = strdup((char *)udev_device_get_sysattr_value(usb_device,
+			                                                                    "manufacturer"));
 			device->product = strdup((char *)udev_device_get_sysattr_value(usb_device, "product"));
 			device->serial = strdup((char *)udev_device_get_sysattr_value(usb_device, "serial"));
 			device->dev_path = strdup((char *)udev_device_get_sysattr_value(usb_device, "devpath"));
@@ -1046,8 +1207,9 @@ struct usb_device_list *usb_device_list_get()
 			while (partition_entry) {
 				const char *partition_name = udev_list_entry_get_name(partition_entry);
 				struct udev_device *partition_device = udev_device_new_from_syspath(udev, partition_name);
-				struct usb_partition *partition = malloc(sizeof(struct usb_partition));
-				char *partition_num = (char *)udev_device_get_sysattr_value(partition_device, "partition");
+				struct usb_partition *partition = usb_partition_new();
+				char *partition_num = (char *)udev_device_get_sysattr_value(partition_device,
+				                                                            "partition");
 				partition->device = device;
 				partition->node = strdup((char *)udev_device_get_devnode(partition_device));
 				partition->sys_path = strdup((char *)udev_device_get_syspath(partition_device));
@@ -1056,7 +1218,8 @@ struct usb_device_list *usb_device_list_get()
 
 				sprintf(partition->dev_path, "%s-%s", device->dev_path, partition_num);
 
-				partition->size = atol(udev_device_get_sysattr_value(partition_device, "size")) * (size_t)512;
+				partition->size = atol(udev_device_get_sysattr_value(partition_device, "size"))
+				                * (size_t)512;
 
 				label = (char *)udev_device_get_property_value(partition_device, "ID_FS_LABEL");
 
@@ -1100,7 +1263,17 @@ struct usb_device_list *usb_device_list_get()
 	return list;
 }
 
-struct usb_partition_list *usb_partition_list_new()
+static struct usb_device *usb_device_new()
+{
+	return malloc(sizeof(struct usb_device));
+}
+
+static struct usb_partition *usb_partition_new()
+{
+	return malloc(sizeof(struct usb_partition));
+}
+
+static struct usb_partition_list *usb_partition_list_new()
 {
 	struct usb_partition_list *list = malloc(sizeof(struct usb_partition_list));
 
@@ -1109,7 +1282,7 @@ struct usb_partition_list *usb_partition_list_new()
 	return list;
 }
 
-void usb_device_free(struct usb_device *device)
+static void usb_device_free(struct usb_device *device)
 {
 	if (!device)
 		return;
@@ -1129,7 +1302,7 @@ void usb_device_free(struct usb_device *device)
 	free(device);
 }
 
-void usb_device_list_free(struct usb_device_list *list)
+static void usb_device_list_free(struct usb_device_list *list)
 {
 	if (!list)
 		return;
@@ -1142,7 +1315,7 @@ void usb_device_list_free(struct usb_device_list *list)
 	free(list);
 }
 
-void usb_partition_list_free(struct usb_partition_list *list)
+static void usb_partition_list_free(struct usb_partition_list *list)
 {
 	if (!list)
 		return;
@@ -1156,7 +1329,7 @@ void usb_partition_list_free(struct usb_partition_list *list)
 	free(list);
 }
 
-void usb_partition_free(struct usb_partition *partition)
+static void usb_partition_free(struct usb_partition *partition)
 {
 	if (!partition)
 		return;
@@ -1169,7 +1342,8 @@ void usb_partition_free(struct usb_partition *partition)
 	free(partition);
 }
 
-void usb_partition_list_add(struct usb_partition_list *list, struct usb_partition *partition)
+static void usb_partition_list_add(struct usb_partition_list *list,
+                                   struct usb_partition *partition)
 {
 	if (!list->partition) {
 		list->partition = partition;
@@ -1181,21 +1355,4 @@ void usb_partition_list_add(struct usb_partition_list *list, struct usb_partitio
 		list->next = usb_partition_list_new();
 		list->next->partition = partition;
 	}
-}
-
-struct udev_device *usb_udev_device_get_child(struct udev *udev, struct udev_device *parent_device, const char *subsystem)
-{
-	struct udev_enumerate *enumerate = udev_enumerate_new(udev);
-
-	udev_enumerate_add_match_parent(enumerate, parent_device);
-	udev_enumerate_add_match_subsystem(enumerate, subsystem);
-	udev_enumerate_scan_devices(enumerate);
-
-	struct udev_list_entry *device_entry = udev_enumerate_get_list_entry(enumerate);
-	const char *device_name = udev_list_entry_get_name(device_entry);
-	struct udev_device *child_device = udev_device_new_from_syspath(udev, device_name);
-
-	udev_enumerate_unref(enumerate);
-
-	return child_device;
 }

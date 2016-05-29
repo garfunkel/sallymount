@@ -1,11 +1,11 @@
-#include <stdlib.h>
 #include <string.h>
+#include <argp.h>
 
 #include "cli.h"
 #include "mount.h"
 #include "umount.h"
 
-const char *argp_program_version = "0.1 - \"Sleep deprecation\"";
+const char *argp_program_version = "1.0 - \"Sleep deprecation\"";
 const char *argp_program_bug_address = "simon@simonallen.org";
 
 static const char cli_doc[] =
@@ -16,7 +16,7 @@ static const char cli_doc[] =
 	"  mount    Mount USB mass storage devices\n"
 	"  umount   Unmount USB mass storage devices";
 
-static char cli_args_doc[] = "[COMMAND [OPTION...]...]";
+static const char cli_args_doc[] = "[COMMAND [OPTION...]...]";
 
 static struct argp_option cli_options[] = {
 	{
@@ -47,9 +47,7 @@ static struct argp_option cli_options[] = {
 		0,
 		"Print sizes in powers of 1000 (e.g., 1.1G)"
 	},
-	{
-		0
-	}
+	{NULL}
 };
 
 struct argp cli_argp = {

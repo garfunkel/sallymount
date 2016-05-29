@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <string.h>
+#include <argp.h>
 
 #include "mount.h"
 #include "usb.h"
@@ -8,14 +9,7 @@ static const char cli_doc_mount[] =
 	"\n"
 	"Mount USB mass storage devices.";
 
-static char cli_args_doc_mount[] = "[USB-PATH...]";
-
-struct argp cli_argp_mount = {
-	cli_options_mount,
-	cli_parse_mount,
-	cli_args_doc_mount,
-	cli_doc_mount
-};
+static const char cli_args_doc_mount[] = "[USB-PATH...]";
 
 static struct argp_option cli_options_mount[] = {
 	{
@@ -25,9 +19,14 @@ static struct argp_option cli_options_mount[] = {
 		0,
 		"Mount all USB devices"
 	},
-	{
-		0
-	}
+	{NULL}
+};
+
+static struct argp cli_argp_mount = {
+	cli_options_mount,
+	cli_parse_mount,
+	cli_args_doc_mount,
+	cli_doc_mount
 };
 
 error_t cli_parse_mount(int key, char* arg, struct argp_state* state)

@@ -1,7 +1,4 @@
-#include <stdio.h>
-#include <string.h>
 #include <stdlib.h>
-#include <libusb-1.0/libusb.h>
 #include <argp.h>
 
 #include "cli.h"
@@ -24,6 +21,6 @@ int main(int argc, char **argv)
 
 	free(cli_args.usb_paths);
 
-	return 0;
+	return EXIT_SUCCESS;
 }
 
