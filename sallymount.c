@@ -22,40 +22,7 @@ int main(int argc, char **argv)
 		}
 	}
 
-	/*libusb_init(NULL);
-	libusb_context *context = NULL;
-	libusb_device **list = NULL;
-	ssize_t count = libusb_get_device_list(context, &list);
-
-	for (size_t i = 0; i < count; i++) {
-		libusb_device *device = list[i];
-		struct libusb_device_descriptor descriptor;
-
-		libusb_get_device_descriptor(device, &descriptor);
-		int bus = libusb_get_bus_number(device);
-
-		unsigned char buf[256];
-		libusb_device_handle *handle = NULL;
-
-		int r = libusb_open(device, &handle);
-		//libusb_get_string_descriptor_ascii(handle, descriptor.bDeviceClass, buf, 256);
-
-		printf("%i\n", r);
-
-		//printf("%i\t%i\t%i\t%i\t", descriptor.bDeviceClass, descriptor.bDeviceSubClass, descriptor.bDescriptorType, bus);
-
-		//uint8_t port_numbers[8];
-
-		//int x = libusb_get_port_numbers(device, port_numbers, 7);
-
-		//for (int j = 0; j < x; j++) {
-		//	printf("%i ", port_numbers[j]);
-		//}
-
-
-
-		//printf("\t%i\n", libusb_get_device_address(device));
-	}*/
+	free(cli_args.usb_paths);
 
 	return 0;
 }

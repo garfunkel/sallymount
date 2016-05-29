@@ -91,5 +91,7 @@ void cmd_umount(struct argp_state* state)
 		usb_umount_multiple(cli_args_umount.usb_paths, cli_args_umount.num_usb_paths);
 	}
 
+	free(cli_args_umount.usb_paths);
+
 	return;
 }

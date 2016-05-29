@@ -61,3 +61,8 @@ void usb_partition_list_add(struct usb_partition_list *list, struct usb_partitio
 
 struct udev_device *usb_udev_device_get_child(struct udev *udev, struct udev_device *parent_device, const char *subsystem);
 //struct udev_device *usb_device_get_child2(struct udev *udev, struct udev_device *parent_device, const char *subsystem);
+
+void usb_device_free(struct usb_device *device);
+void usb_device_list_free(struct usb_device_list *list);
+void usb_partition_list_free(struct usb_partition_list *list);
+void usb_partition_free(struct usb_partition *partition);
