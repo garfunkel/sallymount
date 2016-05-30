@@ -135,7 +135,8 @@ int usb_print_multiple(char *usb_paths[], int num_usb_paths, int verbose, int hu
 		list = head;
 
 		while (list && list->device) {
-			if (strcmp(list->device->dev_path, usb_paths[i]) == 0) {
+			if (strcmp(list->device->dev_path, usb_paths[i]) == 0 ||
+			    strcmp(list->device->node, usb_paths[i]) == 0) {
 				usb_device_list_add(list_to_print, list->device);
 
 				break;
@@ -144,7 +145,8 @@ int usb_print_multiple(char *usb_paths[], int num_usb_paths, int verbose, int hu
 			struct usb_partition_list *partition_list = list->device->partition_list;
 
 			while (partition_list && partition_list->partition) {
-				if (strcmp(partition_list->partition->dev_path, usb_paths[i]) == 0) {
+				if (strcmp(partition_list->partition->dev_path, usb_paths[i]) == 0 ||
+				    strcmp(partition_list->partition->node, usb_paths[i]) == 0) {
 					usb_device_list_add(list_to_print, list->device);
 
 					break;
@@ -455,7 +457,8 @@ int usb_mount_multiple(char *usb_paths[], int num_usb_paths)
 
 	while (list && list->device) {
 		for (int i = 0; i < num_usb_paths; i++) {
-			if (strcmp(list->device->dev_path, usb_paths[i]) == 0) {
+			if (strcmp(list->device->dev_path, usb_paths[i]) == 0 ||
+			    strcmp(list->device->node, usb_paths[i]) == 0) {
 				if ((mount_retcode = usb_mount_device(list->device)))
 					retcode = mount_retcode;
 
@@ -464,7 +467,8 @@ int usb_mount_multiple(char *usb_paths[], int num_usb_paths)
 				struct usb_partition_list *partition_list = list->device->partition_list;
 
 				while (partition_list && partition_list->partition) {
-					if (strcmp(partition_list->partition->dev_path, usb_paths[i]) == 0) {
+					if (strcmp(partition_list->partition->dev_path, usb_paths[i]) == 0 ||
+					    strcmp(partition_list->partition->node, usb_paths[i]) == 0) {
 						if ((mount_retcode = usb_mount_partition(partition_list->partition))) {
 							warn("Mounting partition %s failed", partition_list->partition->node);
 
@@ -520,7 +524,8 @@ int usb_umount_multiple(char *usb_paths[], int num_usb_paths)
 
 	while (list && list->device) {
 		for (int i = 0; i < num_usb_paths; i++) {
-			if (strcmp(list->device->dev_path, usb_paths[i]) == 0) {
+			if (strcmp(list->device->dev_path, usb_paths[i]) == 0 ||
+			    strcmp(list->device->node, usb_paths[i]) == 0) {
 				if ((umount_retcode = usb_umount_device(list->device)))
 					retcode = umount_retcode;
 
@@ -529,7 +534,8 @@ int usb_umount_multiple(char *usb_paths[], int num_usb_paths)
 				struct usb_partition_list *partition_list = list->device->partition_list;
 
 				while (partition_list && partition_list->partition) {
-					if (strcmp(partition_list->partition->dev_path, usb_paths[i]) == 0) {
+					if (strcmp(partition_list->partition->dev_path, usb_paths[i]) == 0 ||
+					    strcmp(partition_list->partition->node, usb_paths[i]) == 0) {
 						if ((umount_retcode = usb_umount_partition(partition_list->partition)) != 0)
 							warn("Unmounting partition %s failed", partition_list->partition->node);
 
