@@ -173,7 +173,7 @@ int usb_print_multiple(char *usb_paths[], int num_usb_paths, int verbose, int hu
 
 	usb_device_list_free(head);
 
-	printf("%s\n", print_str);
+	printf(print_str);
 
 	free(print_str);
 
@@ -193,7 +193,7 @@ int usb_print_all(int verbose, int human_readable)
 
 	usb_device_list_free(list);
 
-	printf("%s\n", print_str);
+	printf(print_str);
 
 	free(print_str);
 
@@ -922,10 +922,15 @@ static size_t usb_device_list_table_max_width_mounted(struct usb_device_list *li
 
 static char *usb_device_list_detail_str(struct usb_device_list *list, int human_readable_mode)
 {
-	char *detail_str = NULL;
 	char *old_detail_str = NULL;
 	char *size = NULL;
 	int retcode = 0;
+	char *detail_str = malloc(1);
+
+	if (!detail_str)
+		err(EXIT_FAILURE, NULL);
+
+	detail_str[0] = '\0';
 
 	while (list && list->device) {
 		size = human_readable_size(list->device->size, human_readable_mode);
@@ -1033,6 +1038,17 @@ static char *usb_device_list_detail_str(struct usb_device_list *list, int human_
 		list = list->next;
 	}
 
+	old_detail_str = detail_str;
+
+	retcode = asprintf(&detail_str,
+	                   "%s\n",
+	                   old_detail_str);
+
+	if (retcode == -1)
+		err(EXIT_FAILURE, NULL);
+
+	free(old_detail_str);
+
 	return detail_str;
 }
 
@@ -1107,7 +1123,7 @@ static char *usb_device_list_table_str(struct usb_device_list *list, int human_r
 	if (retcode == -1)
 		err(EXIT_FAILURE, NULL);
 
-	size_t table_str_size = table_line_str_size * (list_size + 1) + (list_size * 28) + 1;
+	size_t table_str_size = table_line_str_size * (list_size + 1) + (list_size * 28) + 2;
 	char *table_str = malloc(table_str_size);
 
 	if (!table_str)
@@ -1182,6 +1198,8 @@ static char *usb_device_list_table_str(struct usb_device_list *list, int human_r
 
 		list = list->next;
 	}
+
+	sprintf(table_str + strlen(table_str), "\n");
 
 	free(table_partition_fmt_str);
 	free(table_fmt_str);
