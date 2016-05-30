@@ -7,10 +7,10 @@ OBJECTS=sallymount.o usb.o cli.o mount.o umount.o
 all: $(TARGET)
 
 $(TARGET): $(OBJECTS)
-	$(CC) $(LDFLAGS) -o $(TARGET) $(OBJECTS)
+	$(CC) -o $(TARGET) $(OBJECTS) $(LDFLAGS)
 
 %.o: %.c %.h
-	$(CC) $(CFLAGS) -c -o $@ $<
+	$(CC) -c -o $@ $< $(CFLAGS)
 
 clean:
 	rm -f $(TARGET) $(OBJECTS)
