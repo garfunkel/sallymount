@@ -579,10 +579,11 @@ int usb_umount_multiple(char *usb_paths[], int num_usb_paths)
 				while (partition_list && partition_list->partition) {
 					if (strcmp(partition_list->partition->dev_path, usb_paths[i]) == 0 ||
 					    strcmp(partition_list->partition->node, usb_paths[i]) == 0) {
-						if ((umount_retcode = usb_umount_partition(partition_list->partition)) != 0)
+						if ((umount_retcode = usb_umount_partition(partition_list->partition))) {
 							warn("Unmounting partition %s failed", partition_list->partition->node);
 
 							retcode = umount_retcode;
+						}
 					}
 
 					partition_list = partition_list->next;

@@ -1,17 +1,16 @@
-CC=clang -Wall -O2 -flto -pipe -march=native
-CFLAGS=
-LDFLAGS=
+CFLAGS=-Wall -O2 -flto -march=native
+LDFLAGS=$(CFLAGS)
+LDLIBS=-ludev -lmount
 TARGET=sallymount
 OBJECTS=sallymount.o usb.o cli.o mount.o umount.o
-LIBS=-ludev -lmount
 
 all: $(TARGET)
 
 $(TARGET): $(OBJECTS)
-	$(CC) $(LIBS) -o $(TARGET) $(OBJECTS)
+	$(CC) $(LDFLAGS) $(LDLIBS) -o $(TARGET) $(OBJECTS)
 
 %.o: %.c %.h
-	$(CC) -c -o $@ $<
+	$(CC) $(CFLAGS) -c -o $@ $<
 
 clean:
 	rm -f $(TARGET) $(OBJECTS)
