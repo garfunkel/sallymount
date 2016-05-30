@@ -9,7 +9,7 @@
 #include <string.h>
 #include <math.h>
 #include <libudev.h>
-#include <libmount/libmount.h>
+#include <libmount.h>
 
 #include "usb.h"
 
