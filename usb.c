@@ -204,12 +204,16 @@ static char *usb_get_partition_mount_directory(struct usb_partition *partition)
 {
 	char *mount_fmt_str = "%s/usb%s/partition%d";
 	char *mount_path = NULL;
+	int retcode = 0;
 
-	asprintf(&mount_path,
-	         mount_fmt_str,
-	         MOUNT_DIR_PREFIX,
-	         partition->device->dev_path,
-	         partition->num);
+	retcode = asprintf(&mount_path,
+	                   mount_fmt_str,
+	                   MOUNT_DIR_PREFIX,
+	                   partition->device->dev_path,
+	                   partition->num);
+
+	if (retcode == -1)
+		err(EXIT_FAILURE, NULL);
 
 	return mount_path;
 }
@@ -283,11 +287,8 @@ static int usb_partition_is_mounted(struct usb_partition *partition)
 	char *mount_path = usb_get_partition_mount_directory(partition);
 	struct libmnt_context *context = mnt_new_context();
 
-	if (!context) {
-		perror("mnt_new_context()");
-
-		exit(EXIT_FAILURE);
-	}
+	if (!context)
+		err(EXIT_FAILURE, NULL);
 
 	if (mnt_context_set_source(context, partition->node)) {
 		free(mount_path);
@@ -322,11 +323,8 @@ static int usb_mount_partition(struct usb_partition *partition)
 {
 	struct libmnt_context *context = mnt_new_context();
 
-	if (!context) {
-		perror("mnt_new_context()");
-
-		exit(EXIT_FAILURE);
-	}
+	if (!context)
+		err(EXIT_FAILURE, NULL);
 
 	char *mount_path = usb_get_partition_mount_directory(partition);
 	int retcode = 0;
@@ -408,11 +406,8 @@ static int usb_umount_partition(struct usb_partition *partition)
 {
 	struct libmnt_context *context = mnt_new_context();
 
-	if (!context) {
-		perror("mnt_new_context()");
-
-		exit(EXIT_FAILURE);
-	}
+	if (!context)
+		err(EXIT_FAILURE, NULL);
 
 	char *mount_path = usb_get_partition_mount_directory(partition);
 	int retcode = 0;
@@ -621,9 +616,13 @@ int usb_umount_all()
 static char *human_readable_size(size_t num_bytes, int human_readable_mode)
 {
 	char *human_readable_size;
+	int retcode = 0;
 
 	if (human_readable_mode == 0) {
-		asprintf(&human_readable_size, "%lu", num_bytes);
+		retcode = asprintf(&human_readable_size, "%lu", num_bytes);
+
+		if (retcode == -1)
+			err(EXIT_FAILURE, NULL);
 
 		return human_readable_size;
 	}
@@ -648,7 +647,10 @@ static char *human_readable_size(size_t num_bytes, int human_readable_mode)
 		power = 1000;
 
 	if (num_bytes < power) {
-		asprintf(&human_readable_size, "%lu", num_bytes);
+		retcode = asprintf(&human_readable_size, "%lu", num_bytes);
+
+		if (retcode == -1)
+			err(EXIT_FAILURE, NULL);
 
 		return human_readable_size;
 	}
@@ -665,7 +667,10 @@ static char *human_readable_size(size_t num_bytes, int human_readable_mode)
 		i++;
 	}
 
-	asprintf(&human_readable_size, "%lu%s", (size_t)size, suffixes[i]);
+	retcode = asprintf(&human_readable_size, "%lu%s", (size_t)size, suffixes[i]);
+
+	if (retcode == -1)
+		err(EXIT_FAILURE, NULL);
 
 	return human_readable_size;
 }
@@ -707,6 +712,9 @@ static void usb_device_list_add(struct usb_device_list *list, struct usb_device 
 static struct usb_device_list *usb_device_list_new()
 {
 	struct usb_device_list *list = malloc(sizeof(struct usb_device_list));
+
+	if (!list)
+		err(EXIT_FAILURE, NULL);
 
 	memset(list, 0, sizeof(struct usb_device_list));
 
@@ -917,50 +925,54 @@ static char *usb_device_list_detail_str(struct usb_device_list *list, int human_
 	char *detail_str = NULL;
 	char *old_detail_str = NULL;
 	char *size = NULL;
+	int retcode = 0;
 
 	while (list && list->device) {
 		size = human_readable_size(list->device->size, human_readable_mode);
 		old_detail_str = detail_str;
 
-		asprintf(&detail_str,
-		         "%s"
-		         "%s:        \t%s\n"
-		         "%s:         \t%d\n"
-		         "%s:    \t%s\n"
-		         "%s:        \t%s\n"
-		         "%s:       \t%s\n"
-		         "%s:        \t%s\n"
-		         "%s:\t%s\n"
-		         "%s:     \t%s\n"
-		         "%s:      \t%s\n"
-		         "%s:    \t%s\n"
-		         "%s:     \t%s\n"
-		         "%s:       \t%s",
-		         old_detail_str,
-		         HEADER_NODE,
-		         list->device->node,
-		         HEADER_BUS,
-		         list->device->bus,
-		         HEADER_DEV_PATH,
-		         list->device->dev_path,
-		         HEADER_SIZE,
-		         size,
-		         HEADER_LABEL,
-		         list->device->label,
-		         HEADER_TYPE,
-		         list->device->type,
-		         HEADER_MANUFACTURER,
-		         list->device->manufacturer,
-		         HEADER_PRODUCT,
-		         list->device->product,
-		         HEADER_SERIAL,
-		         list->device->serial,
-		         HEADER_SYS_PATH,
-		         list->device->sys_path,
-		         HEADER_VERSION,
-		         trim(list->device->version),
-		         HEADER_SPEED,
-		         list->device->speed);
+		retcode = asprintf(&detail_str,
+		                   "%s"
+		                   "%s:        \t%s\n"
+		                   "%s:         \t%d\n"
+		                   "%s:    \t%s\n"
+		                   "%s:        \t%s\n"
+		                   "%s:       \t%s\n"
+		                   "%s:        \t%s\n"
+		                   "%s:\t%s\n"
+		                   "%s:     \t%s\n"
+		                   "%s:      \t%s\n"
+		                   "%s:    \t%s\n"
+		                   "%s:     \t%s\n"
+		                   "%s:       \t%s",
+		                   old_detail_str,
+		                   HEADER_NODE,
+		                   list->device->node,
+		                   HEADER_BUS,
+		                   list->device->bus,
+		                   HEADER_DEV_PATH,
+		                   list->device->dev_path,
+		                   HEADER_SIZE,
+		                   size,
+		                   HEADER_LABEL,
+		                   list->device->label,
+		                   HEADER_TYPE,
+		                   list->device->type,
+		                   HEADER_MANUFACTURER,
+		                   list->device->manufacturer,
+		                   HEADER_PRODUCT,
+		                   list->device->product,
+		                   HEADER_SERIAL,
+		                   list->device->serial,
+		                   HEADER_SYS_PATH,
+		                   list->device->sys_path,
+		                   HEADER_VERSION,
+		                   trim(list->device->version),
+		                   HEADER_SPEED,
+		                   list->device->speed);
+
+		if (retcode == -1)
+			err(EXIT_FAILURE, NULL);
 
 		free(old_detail_str);
 		free(size);
@@ -971,30 +983,33 @@ static char *usb_device_list_detail_str(struct usb_device_list *list, int human_
 			size = human_readable_size(partition_list->partition->size, human_readable_mode);
 			old_detail_str = detail_str;
 
-			asprintf(&detail_str,
-			        "%s\n"
-			        "%s:   \t%d\n"
-			        "    %s:    \t    %s\n"
-			        "    %s: \t    %s\n"
-			        "    %s:    \t    %s\n"
-			        "    %s:   \t    %s\n"
-			        "    %s:    \t    %s\n"
-			        "    %s:\t    %s",
-			        old_detail_str,
-			        HEADER_PARTITION,
-			        partition_list->partition->num,
-			        HEADER_NODE,
-			        partition_list->partition->node,
-			        HEADER_MOUNTED,
-			        usb_partition_is_mounted(partition_list->partition) ? CELL_YES : CELL_NO,
-			        HEADER_SIZE,
-			        size,
-			        HEADER_LABEL,
-			        partition_list->partition->label,
-			        HEADER_TYPE,
-			        partition_list->partition->type,
-			        HEADER_SYS_PATH,
-			        partition_list->partition->sys_path);
+			retcode = asprintf(&detail_str,
+			                   "%s\n"
+			                   "%s:   \t%d\n"
+			                   "    %s:    \t    %s\n"
+			                   "    %s: \t    %s\n"
+			                   "    %s:    \t    %s\n"
+			                   "    %s:   \t    %s\n"
+			                   "    %s:    \t    %s\n"
+			                   "    %s:\t    %s",
+			                   old_detail_str,
+			                   HEADER_PARTITION,
+			                   partition_list->partition->num,
+			                   HEADER_NODE,
+			                   partition_list->partition->node,
+			                   HEADER_MOUNTED,
+			                   usb_partition_is_mounted(partition_list->partition) ? CELL_YES : CELL_NO,
+			                   HEADER_SIZE,
+			                   size,
+			                   HEADER_LABEL,
+			                   partition_list->partition->label,
+			                   HEADER_TYPE,
+			                   partition_list->partition->type,
+			                   HEADER_SYS_PATH,
+			                   partition_list->partition->sys_path);
+
+			if (retcode == -1)
+				err(EXIT_FAILURE, NULL);
 
 			free(old_detail_str);
 			free(size);
@@ -1005,9 +1020,12 @@ static char *usb_device_list_detail_str(struct usb_device_list *list, int human_
 		if (list->next) {
 			old_detail_str = detail_str;
 
-			asprintf(&detail_str,
-			         "%s\n\n",
-			         old_detail_str);
+			retcode = asprintf(&detail_str,
+			                   "%s\n\n",
+			                   old_detail_str);
+
+			if (retcode == -1)
+				err(EXIT_FAILURE, NULL);
 
 			free(old_detail_str);
 		}
@@ -1058,33 +1076,43 @@ static char *usb_device_list_table_str(struct usb_device_list *list, int human_r
 	char *table_fmt_str = NULL;
 	char *table_partition_fmt_str = NULL;
 
-	asprintf(&table_fmt_str,
-	        "%%-%lus\t%%-%lus\t%%-%lus\t%%-%lus\t%%-%lus\t%%-%lus\t%%-%lus\t%%-%lus",
-	        width_node,
-	        width_dev_path,
-	        width_mounted,
-	        width_size,
-	        width_label,
-	        width_type,
-	        width_manufacturer,
-	        width_product);
+	int retcode = asprintf(&table_fmt_str,
+	                       "%%-%lus\t%%-%lus\t%%-%lus\t%%-%lus\t%%-%lus\t%%-%lus\t%%-%lus\t%%-%lus",
+	                       width_node,
+	                       width_dev_path,
+	                       width_mounted,
+	                       width_size,
+	                       width_label,
+	                       width_type,
+	                       width_manufacturer,
+	                       width_product);
+
+	if (retcode == -1)
+		err(EXIT_FAILURE, NULL);
 
 	char *child_indicator = " ├─ ";
 	char *child_indicator_final = " ╰─ ";
 
-	asprintf(&table_partition_fmt_str,
-	        "%%s%%-%lus\t%%s%%-%lus\t%%s%%-%lus\t%%s%%-%lus\t%%s%%-%lus\t%%s%%-%lus\t%%s%%-%lus\t%%s%%-%lus",
-	        width_node - 4,
-	        width_dev_path - 4,
-	        width_mounted - 4,
-	        width_size - 4,
-	        width_label - 4,
-	        width_type - 4,
-	        width_manufacturer - 4,
-	        width_product - 4);
+	retcode = asprintf(&table_partition_fmt_str,
+	                   "%%s%%-%lus\t%%s%%-%lus\t%%s%%-%lus\t%%s%%-%lus\t%%s%%-%lus\t%%s%%-%lus\t%%s%%-%lus\t%%s%%-%lus",
+	                   width_node - 4,
+	                   width_dev_path - 4,
+	                   width_mounted - 4,
+	                   width_size - 4,
+	                   width_label - 4,
+	                   width_type - 4,
+	                   width_manufacturer - 4,
+	                   width_product - 4);
+
+	if (retcode == -1)
+		err(EXIT_FAILURE, NULL);
 
 	size_t table_str_size = table_line_str_size * (list_size + 1) + (list_size * 28) + 1;
 	char *table_str = malloc(table_str_size);
+
+	if (!table_str)
+		err(EXIT_FAILURE, NULL);
+
 	table_str[0] = '\0';
 
 	sprintf(table_str,
@@ -1204,11 +1232,8 @@ static struct usb_device_list *usb_device_list_get()
 {
 	struct udev *udev = udev_new();
 
-	if (!udev) {
-		perror("udev_new() failed");
-
-		exit(EXIT_FAILURE);
-	}
+	if (!udev)
+		err(EXIT_FAILURE, NULL);
 
 	struct udev_enumerate *enumerate = udev_enumerate_new(udev);
 
@@ -1233,6 +1258,9 @@ static struct usb_device_list *usb_device_list_get()
 
 		if (usb_device && block_device && scsi_disk_device) {
 			struct usb_device *device = usb_device_new();
+
+			if (!device)
+				err(EXIT_FAILURE, NULL);
 
 			device->node = strdup((char *)udev_device_get_devnode(block_device));
 			device->manufacturer = strdup((char *)udev_device_get_sysattr_value(usb_device,
@@ -1278,6 +1306,10 @@ static struct usb_device_list *usb_device_list_get()
 				const char *partition_name = udev_list_entry_get_name(partition_entry);
 				struct udev_device *partition_device = udev_device_new_from_syspath(udev, partition_name);
 				struct usb_partition *partition = usb_partition_new();
+
+				if (!partition)
+					err(EXIT_FAILURE, NULL);
+
 				char *partition_num = (char *)udev_device_get_sysattr_value(partition_device,
 				                                                            "partition");
 				partition->device = device;
@@ -1285,6 +1317,9 @@ static struct usb_device_list *usb_device_list_get()
 				partition->sys_path = strdup((char *)udev_device_get_syspath(partition_device));
 				partition->num = atoi(partition_num);
 				partition->dev_path = malloc(strlen(device->dev_path) + strlen(partition_num) + 2);
+
+				if (!partition->dev_path)
+					err(EXIT_FAILURE, NULL);
 
 				sprintf(partition->dev_path, "%s-%s", device->dev_path, partition_num);
 
@@ -1346,6 +1381,9 @@ static struct usb_partition *usb_partition_new()
 static struct usb_partition_list *usb_partition_list_new()
 {
 	struct usb_partition_list *list = malloc(sizeof(struct usb_partition_list));
+
+	if (!list)
+		err(EXIT_FAILURE, NULL);
 
 	memset(list, 0, sizeof(struct usb_partition_list));
 
