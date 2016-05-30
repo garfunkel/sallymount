@@ -50,9 +50,6 @@ error_t cli_parse_umount(int key, char* arg, struct argp_state* state)
 				}
 			}
 
-			//TODO: Check for valid USB paths?
-			//argp_error(state, "%s is not a valid command", arg);
-
 			break;
 	}
 

@@ -101,16 +101,9 @@ error_t cli_parse_opt(int key, char *arg, struct argp_state *state) {
 						break;
 					}
 				}
-
-				//TODO: Check for valid USB paths?
-				//argp_error(state, "%s is not a valid command", arg);
 			}
 
 			break;
-
-		//TODO: Check for valid USB paths?
-		//default:
-		//	return ARGP_ERR_UNKNOWN;
 	}
 
 	return 0;
