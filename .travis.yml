@@ -2,10 +2,10 @@ language: c
 
 compiler:
   - gcc
-  - clang
+  #- clang
 
 before_install:
   - sudo apt-get -qq update
-  - sudo apt-get install -y libudev-dev libmount-dev libblkid-dev llvm-3.4-dev
+  - sudo apt-get install -y libudev-dev libmount-dev libblkid-dev
 
 script: make
