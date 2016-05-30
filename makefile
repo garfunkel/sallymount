@@ -1,4 +1,4 @@
-CFLAGS=-Wall -O2 -flto -march=native -pedantic-errors -fgnu89-inline
+CFLAGS=-std=c99 -Wall -O2 -flto -march=native -pedantic-errors -fgnu89-inline
 LDFLAGS=$(CFLAGS)
 LDLIBS=-ludev -lmount
 TARGET=sallymount
