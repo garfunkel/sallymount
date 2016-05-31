@@ -1038,16 +1038,18 @@ static char *usb_device_list_detail_str(struct usb_device_list *list, int human_
 		list = list->next;
 	}
 
-	old_detail_str = detail_str;
+	if (strlen(detail_str) > 0) {
+		old_detail_str = detail_str;
 
-	retcode = asprintf(&detail_str,
-	                   "%s\n",
-	                   old_detail_str);
+		retcode = asprintf(&detail_str,
+		                   "%s\n",
+		                   old_detail_str);
 
-	if (retcode == -1)
-		err(EXIT_FAILURE, NULL);
+		if (retcode == -1)
+			err(EXIT_FAILURE, NULL);
 
-	free(old_detail_str);
+		free(old_detail_str);
+	}
 
 	return detail_str;
 }
