@@ -7,6 +7,7 @@ struct cli_args_mount
 	int all;
 	char **usb_paths;
 	size_t num_usb_paths;
+	char *options;
 };
 
 error_t cli_parse_mount(int key, char *arg, struct argp_state *state);

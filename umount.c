@@ -29,7 +29,7 @@ struct argp cli_argp_umount = {
 	cli_doc_umount
 };
 
-error_t cli_parse_umount(int key, char* arg, struct argp_state* state)
+error_t cli_parse_umount(int key, char *arg, struct argp_state *state)
 {
 	struct cli_args_umount *cli_args_umount = state->input;
 
@@ -56,12 +56,12 @@ error_t cli_parse_umount(int key, char* arg, struct argp_state* state)
 	return 0;
 }
 
-void cmd_umount(struct argp_state* state)
+void cmd_umount(struct argp_state *state)
 {
 	struct cli_args_umount cli_args_umount = {0};
-	int    argc = state->argc - state->next + 1;
-	char** argv = &state->argv[state->next - 1];
-	char*  argv0 =  argv[0];
+	int argc = state->argc - state->next + 1;
+	char **argv = &state->argv[state->next - 1];
+	char *argv0 = argv[0];
 
 	cli_args_umount.cli_args = state->input;
 	cli_args_umount.usb_paths = calloc(sizeof(char *), argc);

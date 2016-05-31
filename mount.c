@@ -19,6 +19,13 @@ static struct argp_option cli_options_mount[] = {
 		0,
 		"Mount all USB devices"
 	},
+	{
+		"options",
+		'o',
+		"options",
+		0,
+		"Mount options string"
+	},
 	{NULL}
 };
 
@@ -29,7 +36,7 @@ static struct argp cli_argp_mount = {
 	cli_doc_mount
 };
 
-error_t cli_parse_mount(int key, char* arg, struct argp_state* state)
+error_t cli_parse_mount(int key, char *arg, struct argp_state *state)
 {
 	struct cli_args_mount *cli_args_mount = state->input;
 
@@ -37,6 +44,11 @@ error_t cli_parse_mount(int key, char* arg, struct argp_state* state)
 	{
 		case 'a':
 			cli_args_mount->all = 1;
+
+			break;
+
+		case 'o':
+			cli_args_mount->options = strdup(arg);
 
 			break;
 
@@ -56,15 +68,16 @@ error_t cli_parse_mount(int key, char* arg, struct argp_state* state)
 	return 0;
 }
 
-void cmd_mount(struct argp_state* state)
+void cmd_mount(struct argp_state *state)
 {
 	struct cli_args_mount cli_args_mount = {0};
-	int    argc = state->argc - state->next + 1;
-	char** argv = &state->argv[state->next - 1];
-	char*  argv0 =  argv[0];
+	int argc = state->argc - state->next + 1;
+	char **argv = &state->argv[state->next - 1];
+	char *argv0 =  argv[0];
 
 	cli_args_mount.cli_args = state->input;
 	cli_args_mount.usb_paths = calloc(sizeof(char *), argc);
+	cli_args_mount.options = NULL;
 
 	argv[0] = malloc(strlen(state->name) + strlen("mount") + 2);
 
@@ -82,12 +95,13 @@ void cmd_mount(struct argp_state* state)
 	state->next += argc - 1;
 
 	if (cli_args_mount.all) {
-		usb_mount_all();
+		usb_mount_all(cli_args_mount.options);
 	} else {
-		usb_mount_multiple(cli_args_mount.usb_paths, cli_args_mount.num_usb_paths);
+		usb_mount_multiple(cli_args_mount.usb_paths, cli_args_mount.num_usb_paths, cli_args_mount.options);
 	}
 
 	free(cli_args_mount.usb_paths);
+	free(cli_args_mount.options);
 
 	return;
 }
